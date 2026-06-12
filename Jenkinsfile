@@ -4,7 +4,7 @@ pipeline {
     environment {
         REMOTE_HOST     = '13.41.167.97'
         REMOTE_USER     = 'consultant'
-        REMOTE_PASSWORD = 'Cl0ud3ra@2026#Secur3'
+        REMOTE_PASSWORD = 'Cl0ud3ra@2026#Secur3!'
         PROJECT_DIR     = '/home/consultant/yamini/tfl_Project1'
         HDFS_DIR        = '/tmp/yamini/tfl_project1'
         HIVESERVER2_HOST = '18.175.245.20'
@@ -129,7 +129,7 @@ pipeline {
                 sh '''
                     sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                         ${REMOTE_USER}@${REMOTE_HOST} \
-                        "beeline -u 'jdbc:hive2://ip-172-31-12-74.eu-west-2.compute.internal:10000/default' -f ${PROJECT_DIR}/hive/hive_table.sql" 2>&1 | \
+                        "beeline -u 'jdbc:hive2://${HIVESERVER2_HOST}:10000/default' -n consultant -p 'Cl0ud3ra@2026#Secur3!' -f ${PROJECT_DIR}/hive/hive_table.sql" 2>&1 | \
                         grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
 
                     echo "Hive tables created"

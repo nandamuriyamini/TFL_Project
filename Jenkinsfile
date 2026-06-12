@@ -97,10 +97,10 @@ pipeline {
                 sh '''
                     sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                         ${REMOTE_USER}@${REMOTE_HOST} \
-                        "hdfs dfs -rm -r -f -skipTrash ${HDFS_DIR} 2>/dev/null || true" 2>&1 | \
+                        "HADOOP_USER_NAME=hdfs hdfs dfs -rm -r -f -skipTrash ${HDFS_DIR} 2>/dev/null || true; HADOOP_USER_NAME=hdfs hdfs dfs -mkdir -p ${HDFS_DIR}; HADOOP_USER_NAME=hdfs hdfs dfs -chmod 777 ${HDFS_DIR}" 2>&1 | \
                         grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
 
-                    echo "HDFS cleaned"
+                    echo "HDFS cleaned and recreated with open permissions"
                 '''
             }
         }

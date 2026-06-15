@@ -58,8 +58,9 @@ def write_batch_to_hbase(records):
         stderr=subprocess.PIPE,
         timeout=60
     )
-    if result.returncode != 0:
-        logging.error("HBase write error: %s", result.stderr.decode('utf-8', errors='ignore'))
+    stderr_text = result.stderr.decode('utf-8', errors='ignore').strip()
+    if result.returncode != 0 and stderr_text:
+        logging.error("HBase write error: %s", stderr_text)
     else:
         logging.info("Wrote %d records to HBase", len(records))
 

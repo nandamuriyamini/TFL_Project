@@ -64,9 +64,9 @@ pipeline {
                 sh '''
                     sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                         ${REMOTE_USER}@${REMOTE_HOST} \
-                        "pkill -f send_data_to_kafka.py 2>/dev/null || true; \
-                         pkill -f write_kafka_to_hbase.py 2>/dev/null || true; \
-                         sleep 2; \
+                        "pkill -9 -f send_data_to_kafka.py 2>/dev/null || true; \
+                         pkill -9 -f write_kafka_to_hbase.py 2>/dev/null || true; \
+                         sleep 3; \
                          echo 'Old processes stopped'" 2>&1 | \
                         grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
                 '''

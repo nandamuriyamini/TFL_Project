@@ -121,17 +121,3 @@ JOIN fact_station_lines b ON s.station_id = b.station_id
 GROUP BY s.station_name
 ORDER BY num_lines DESC;
 
--- Save the results as Gold-layer tables
-CREATE TABLE yamini_tfl_gold_busiest_stations AS
-SELECT
-    d.year,
-    s.station_name,
-    SUM(f.total_entry_exit) AS total_passengers
-FROM fact_passenger_entry_exit f
-JOIN dim_date d
-    ON f.date_id = d.date_id
-JOIN dim_stations s
-    ON f.station_id = s.station_id
-GROUP BY
-    d.year,
-    s.station_name;

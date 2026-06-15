@@ -143,7 +143,10 @@ pipeline {
                 sh '''
                     sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                         ${REMOTE_USER}@${REMOTE_HOST} \
-                        "beeline -u 'jdbc:hive2://${HIVESERVER2_HOST}:10000/default' -n consultant -p 'Cl0ud3ra@2026#Secur3!' -f ${PROJECT_DIR}/hive/hive_table.sql" 2>&1 | \
+                        "beeline -u 'jdbc:hive2://${HIVESERVER2_HOST}:10000/default' -n consultant -p 'Cl0ud3ra@2026#Secur3!' \
+                             -e 'DROP TABLE IF EXISTS yamini_tfl_proj.yamini_tfl_gold_busiest_stations' 2>/dev/null || true; \
+                         beeline -u 'jdbc:hive2://${HIVESERVER2_HOST}:10000/default' -n consultant -p 'Cl0ud3ra@2026#Secur3!' \
+                             -f ${PROJECT_DIR}/hive/hive_table.sql" 2>&1 | \
                         grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
 
                     echo "Hive tables created"

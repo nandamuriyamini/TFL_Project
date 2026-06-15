@@ -53,13 +53,13 @@ def write_batch_to_hbase(records):
 
     result = subprocess.run(
         ['hbase', 'shell', '-n'],
-        input=hbase_input,
-        capture_output=True,
-        text=True,
+        input=hbase_input.encode('utf-8'),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         timeout=60
     )
     if result.returncode != 0:
-        logging.error("HBase write error: %s", result.stderr)
+        logging.error("HBase write error: %s", result.stderr.decode('utf-8', errors='ignore'))
     else:
         logging.info("Wrote %d records to HBase", len(records))
 

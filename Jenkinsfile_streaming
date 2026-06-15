@@ -133,10 +133,7 @@ pipeline {
                 sh '''
                     sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                         ${REMOTE_USER}@${REMOTE_HOST} \
-                        "echo '--- HBase Record Count ---'; \
-                         echo \"count '${HBASE_TABLE}'\" | hbase shell -n 2>/dev/null; \
-                         echo '--- Sample Records ---'; \
-                         echo \"scan '${HBASE_TABLE}', {LIMIT => 5}\" | hbase shell -n 2>/dev/null" 2>&1 | \
+                        'echo "--- HBase Record Count ---" && echo "count '"'"'tfl_arrivals'"'"'" | hbase shell -n 2>/dev/null | grep -E "^[0-9]|row"; echo "--- Sample Records ---" && echo "scan '"'"'tfl_arrivals'"'"', {LIMIT => 3}" | hbase shell -n 2>/dev/null | head -20' 2>&1 | \
                         grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
                 '''
             }

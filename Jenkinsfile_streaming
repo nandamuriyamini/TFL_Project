@@ -2,14 +2,17 @@ pipeline {
     agent any
 
     environment {
-        REMOTE_HOST     = '13.41.167.97'
-        REMOTE_USER     = 'consultant'
-        REMOTE_PASSWORD = 'Cl0ud3ra@2026#Secur3!'
-        PROJECT_DIR     = '/home/consultant/yamini/tfl_Project1'
-        KAFKA_BROKER    = 'ip-172-31-6-42.eu-west-2.compute.internal:9092'
-        KAFKA_TOPIC     = 'tfl_arrivals'
-        HBASE_TABLE     = 'tfl_arrivals'
-        GITHUB_RAW      = 'https://raw.githubusercontent.com/nandamuriyamini/TFL_Project/main/src/kafka'
+        REMOTE_HOST      = '13.41.167.97'
+        REMOTE_USER      = 'consultant'
+        REMOTE_PASSWORD  = 'Cl0ud3ra@2026#Secur3!'
+        PROJECT_DIR      = '/home/consultant/yamini/tfl_Project1'
+        KAFKA_BROKER     = 'ip-172-31-6-42.eu-west-2.compute.internal:9092'
+        KAFKA_TOPIC      = 'tfl_arrivals'
+        HBASE_TABLE      = 'tfl_arrivals'
+        HDFS_SPARK_BASE  = '/tmp/yamini/tfl_spark_streaming'
+        HIVESERVER2_HOST = '18.175.245.20'
+        GITHUB_RAW_KAFKA = 'https://raw.githubusercontent.com/nandamuriyamini/TFL_Project/main/src/kafka'
+        GITHUB_RAW_SPARK = 'https://raw.githubusercontent.com/nandamuriyamini/TFL_Project/main/src/spark'
     }
 
     stages {
@@ -32,7 +35,7 @@ pipeline {
                 sh '''
                     sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                         ${REMOTE_USER}@${REMOTE_HOST} \
-                        "mkdir -p ${PROJECT_DIR}/kafka" 2>&1 | \
+                        "mkdir -p ${PROJECT_DIR}/kafka ${PROJECT_DIR}/spark" 2>&1 | \
                         grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
                     echo "Directories created"
                 '''
@@ -48,9 +51,12 @@ pipeline {
                     sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                         ${REMOTE_USER}@${REMOTE_HOST} \
                         "cd ${PROJECT_DIR}/kafka && \
-                         wget -q -O send_data_to_kafka.py ${GITHUB_RAW}/send_data_to_kafka.py && \
-                         wget -q -O write_kafka_to_hbase.py ${GITHUB_RAW}/write_kafka_to_hbase.py && \
-                         echo 'Scripts downloaded successfully'" 2>&1 | \
+                         wget -q -O send_data_to_kafka.py   ${GITHUB_RAW_KAFKA}/send_data_to_kafka.py && \
+                         wget -q -O write_kafka_to_hbase.py ${GITHUB_RAW_KAFKA}/write_kafka_to_hbase.py && \
+                         cd ${PROJECT_DIR}/spark && \
+                         wget -q -O spark_streaming_tfl.py  ${GITHUB_RAW_SPARK}/spark_streaming_tfl.py && \
+                         wget -q -O hive_spark_table.sql    ${GITHUB_RAW_SPARK}/hive_spark_table.sql && \
+                         echo 'All scripts downloaded successfully'" 2>&1 | \
                         grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
                 '''
             }
@@ -64,10 +70,30 @@ pipeline {
                 sh '''
                     sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                         ${REMOTE_USER}@${REMOTE_HOST} \
-                        "pkill -9 -f send_data_to_kafka.py 2>/dev/null || true; \
+                        "pkill -9 -f send_data_to_kafka.py  2>/dev/null || true; \
                          pkill -9 -f write_kafka_to_hbase.py 2>/dev/null || true; \
+                         pkill -9 -f spark_streaming_tfl.py  2>/dev/null || true; \
+                         pkill -9 -f SparkSubmit              2>/dev/null || true; \
                          sleep 3; \
                          echo 'Old processes stopped'" 2>&1 | \
+                        grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
+                '''
+            }
+        }
+
+        stage('Prepare HDFS for Spark') {
+            steps {
+                echo '========================================='
+                echo 'Stage 5: Clean and Prepare Spark HDFS Directories'
+                echo '========================================='
+                sh '''
+                    sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                        ${REMOTE_USER}@${REMOTE_HOST} \
+                        "HADOOP_USER_NAME=hdfs hdfs dfs -rm -r -f -skipTrash ${HDFS_SPARK_BASE} 2>/dev/null || true; \
+                         HADOOP_USER_NAME=hdfs hdfs dfs -mkdir -p ${HDFS_SPARK_BASE}/output; \
+                         HADOOP_USER_NAME=hdfs hdfs dfs -mkdir -p ${HDFS_SPARK_BASE}/checkpoint; \
+                         HADOOP_USER_NAME=hdfs hdfs dfs -chmod -R 777 ${HDFS_SPARK_BASE}; \
+                         echo 'HDFS Spark directories ready'" 2>&1 | \
                         grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
                 '''
             }
@@ -76,7 +102,7 @@ pipeline {
         stage('Start Kafka Producer') {
             steps {
                 echo '========================================='
-                echo 'Stage 5: Start TFL API → Kafka Producer'
+                echo 'Stage 6: Start TFL API → Kafka Producer'
                 echo '========================================='
                 sh '''
                     sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
@@ -92,7 +118,7 @@ pipeline {
         stage('Start HBase Consumer') {
             steps {
                 echo '========================================='
-                echo 'Stage 6: Start Kafka → HBase Consumer'
+                echo 'Stage 7: Start Kafka → HBase Consumer'
                 echo '========================================='
                 sh '''
                     sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
@@ -105,10 +131,28 @@ pipeline {
             }
         }
 
+        stage('Start Spark Streaming') {
+            steps {
+                echo '========================================='
+                echo 'Stage 8: Start Kafka → HDFS Spark Streaming Job'
+                echo '========================================='
+                sh '''
+                    sshpass -p "${REMOTE_PASSWORD}" ssh \
+                        -o StrictHostKeyChecking=no \
+                        -o UserKnownHostsFile=/dev/null \
+                        ${REMOTE_USER}@${REMOTE_HOST} \
+                        "nohup spark-submit --master yarn --deploy-mode client --name TFL_Spark_Streaming --num-executors 2 --executor-memory 1g --driver-memory 512m --conf spark.sql.parquet.writeLegacyFormat=true --conf spark.yarn.queue=default --packages org.apache.spark:spark-sql-kafka-0-10_2.11:2.4.8 ${PROJECT_DIR}/spark/spark_streaming_tfl.py > /tmp/spark_streaming.log 2>&1 & \
+                         echo \"Spark PID: \$!\"" 2>&1 | \
+                        grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
+                    echo "Spark Streaming started"
+                '''
+            }
+        }
+
         stage('Verify Kafka Topic') {
             steps {
                 echo '========================================='
-                echo 'Stage 7: Verify Kafka Topic and Messages'
+                echo 'Stage 9: Verify Kafka Topic and Messages'
                 echo '========================================='
                 sh '''
                     sleep 30
@@ -128,7 +172,7 @@ pipeline {
         stage('Verify HBase Table') {
             steps {
                 echo '========================================='
-                echo 'Stage 8: Verify HBase Records'
+                echo 'Stage 10: Verify HBase Records'
                 echo '========================================='
                 sh '''
                     sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
@@ -139,20 +183,42 @@ pipeline {
             }
         }
 
-        stage('Check Logs') {
+        stage('Verify Spark Output and Create Hive Table') {
             steps {
                 echo '========================================='
-                echo 'Stage 9: Check Producer and Consumer Logs'
+                echo 'Stage 11: Check Spark HDFS Output + Register Hive Table'
+                echo '========================================='
+                sh '''
+                    sleep 120
+                    sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                        ${REMOTE_USER}@${REMOTE_HOST} \
+                        "echo '--- Spark HDFS Output ---'; \
+                         hdfs dfs -ls ${HDFS_SPARK_BASE}/output 2>/dev/null || echo 'No Parquet files yet - Spark still initialising'; \
+                         echo '--- Output Size ---'; \
+                         hdfs dfs -du -s -h ${HDFS_SPARK_BASE}/output 2>/dev/null || echo '0 bytes'; \
+                         echo '--- Creating Hive External Table ---'; \
+                         beeline -u 'jdbc:hive2://${HIVESERVER2_HOST}:10000/default' -n consultant -p 'Cl0ud3ra@2026#Secur3!' -f ${PROJECT_DIR}/spark/hive_spark_table.sql" 2>&1 | \
+                        grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
+                '''
+            }
+        }
+
+        stage('Check All Logs') {
+            steps {
+                echo '========================================='
+                echo 'Stage 12: Check Producer, Consumer and Spark Logs'
                 echo '========================================='
                 sh '''
                     sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                         ${REMOTE_USER}@${REMOTE_HOST} \
                         "echo '--- Running Processes ---'; \
-                         ps aux | grep -E 'send_data_to_kafka|write_kafka_to_hbase' | grep -v grep; \
-                         echo '--- Producer Log (last 50 lines) ---'; \
-                         tail -50 /tmp/producer_success.log 2>/dev/null || echo 'No producer log yet'; \
-                         echo '--- Consumer Log (last 50 lines) ---'; \
-                         tail -50 /tmp/hbase_consumer.log 2>/dev/null || echo 'No consumer log yet'" 2>&1 | \
+                         ps aux | grep -E 'send_data_to_kafka|write_kafka_to_hbase|spark_streaming_tfl' | grep -v grep; \
+                         echo '--- Producer Log (last 20 lines) ---'; \
+                         tail -20 /tmp/producer_success.log 2>/dev/null || echo 'No producer log yet'; \
+                         echo '--- Consumer Log (last 20 lines) ---'; \
+                         tail -20 /tmp/hbase_consumer.log 2>/dev/null || echo 'No consumer log yet'; \
+                         echo '--- Spark Log (last 20 lines) ---'; \
+                         tail -20 /tmp/spark_streaming.log 2>/dev/null || echo 'No spark log yet'" 2>&1 | \
                         grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
                 '''
             }
@@ -164,11 +230,14 @@ pipeline {
             echo '========================================='
             echo 'TFL STREAMING PIPELINE RUNNING SUCCESSFULLY'
             echo '========================================='
-            echo "Server      : ${REMOTE_HOST}"
-            echo "Kafka Topic : ${KAFKA_TOPIC}"
-            echo "HBase Table : ${HBASE_TABLE}"
-            echo "Producer log: /tmp/producer_success.log"
-            echo "Consumer log: /tmp/hbase_consumer.log"
+            echo "Server        : ${REMOTE_HOST}"
+            echo "Kafka Topic   : ${KAFKA_TOPIC}"
+            echo "HBase Table   : ${HBASE_TABLE}"
+            echo "Spark Output  : ${HDFS_SPARK_BASE}/output"
+            echo "Hive Table    : yamini_tfl_proj.tfl_spark_arrivals"
+            echo "Producer log  : /tmp/producer_success.log"
+            echo "Consumer log  : /tmp/hbase_consumer.log"
+            echo "Spark log     : /tmp/spark_streaming.log"
             echo '========================================='
         }
         failure {

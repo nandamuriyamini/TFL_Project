@@ -17,7 +17,7 @@ KAFKA_TOPIC  = 'tfl_arrivals'
 GROUP_ID     = 'yamini_spark_consumer'
 HDFS_OUTPUT  = '/tmp/yamini/tfl_spark_streaming/output'
 CHECKPOINT   = '/tmp/yamini/tfl_spark_streaming/checkpoint'
-RUN_SECS     = 300  # 5-minute window then graceful exit
+RUN_SECS     = 3600  # 1 hour, matches producer duration
 
 SCHEMA = StructType([
     StructField("id",              StringType(),  True),

@@ -142,7 +142,7 @@ pipeline {
                         -o StrictHostKeyChecking=no \
                         -o UserKnownHostsFile=/dev/null \
                         ${REMOTE_USER}@${REMOTE_HOST} \
-                        "nohup spark-submit --master yarn --deploy-mode client --name TFL_Spark_Streaming --num-executors 2 --executor-memory 1g --driver-memory 512m --conf spark.sql.parquet.writeLegacyFormat=true --conf spark.yarn.queue=default ${PROJECT_DIR}/spark/spark_streaming_tfl.py > /tmp/spark_streaming.log 2>&1 & echo \"Spark PID: \$!\"" 2>&1 | \
+                        "nohup spark-submit --master local[2] --name TFL_Spark_Streaming --driver-memory 512m --conf spark.sql.parquet.writeLegacyFormat=true ${PROJECT_DIR}/spark/spark_streaming_tfl.py > /tmp/spark_streaming.log 2>&1 & echo \"Spark PID: \$!\"" 2>&1 | \
                         grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
                     echo "Spark Streaming started"
                 '''

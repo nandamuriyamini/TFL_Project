@@ -2,13 +2,13 @@ pipeline {
     agent any
 
     environment {
-        REMOTE_HOST     = '13.41.167.97'
-        REMOTE_USER     = 'consultant'
-        REMOTE_PASSWORD = 'Cl0ud3ra@2026#Secur3!'
-        PROJECT_DIR     = '/home/consultant/yamini/tfl_Project1'
-        KAFKA_BROKER    = 'ip-172-31-6-42.eu-west-2.compute.internal:9092'
-        KAFKA_TOPIC     = 'tfl_arrivals'
-        HBASE_TABLE     = 'tfl_arrivals'
+        REMOTE_HOST  = '13.41.167.97'
+        REMOTE_USER  = 'ec2-user'
+        SSH_KEY      = '/var/lib/jenkins/.ssh/test_key.pem'
+        PROJECT_DIR  = '/home/ec2-user/yamini/tfl_Project1'
+        KAFKA_BROKER = 'ip-172-31-6-42.eu-west-2.compute.internal:9092'
+        KAFKA_TOPIC  = 'tfl_arrivals'
+        HBASE_TABLE  = 'tfl_arrivals'
     }
 
     stages {
@@ -29,7 +29,7 @@ pipeline {
                 echo 'Stage 2: Create Directories on Cloudera'
                 echo '========================================='
                 sh '''
-                    sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                    ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                         ${REMOTE_USER}@${REMOTE_HOST} \
                         "mkdir -p ${PROJECT_DIR}/kafka" 2>&1 | \
                         grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
@@ -45,12 +45,12 @@ pipeline {
                 echo 'Stage 3: Copy Producer and Consumer Scripts'
                 echo '========================================='
                 sh '''
-                    sshpass -p "${REMOTE_PASSWORD}" scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                    scp -i ${SSH_KEY} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                         src/kafka/send_data_to_kafka.py \
                         ${REMOTE_USER}@${REMOTE_HOST}:${PROJECT_DIR}/kafka/ 2>&1 | \
                         grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
 
-                    sshpass -p "${REMOTE_PASSWORD}" scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                    scp -i ${SSH_KEY} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                         src/kafka/write_kafka_to_hbase.py \
                         ${REMOTE_USER}@${REMOTE_HOST}:${PROJECT_DIR}/kafka/ 2>&1 | \
                         grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
@@ -66,7 +66,7 @@ pipeline {
                 echo 'Stage 4: Create HBase Table (if not exists)'
                 echo '========================================='
                 sh '''
-                    sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                    ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                         ${REMOTE_USER}@${REMOTE_HOST} \
                         "echo \"create '${HBASE_TABLE}', 'cf'\" | hbase shell -n 2>/dev/null || true" 2>&1 | \
                         grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
@@ -82,7 +82,7 @@ pipeline {
                 echo 'Stage 5: Kill Any Previously Running Scripts'
                 echo '========================================='
                 sh '''
-                    sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                    ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                         ${REMOTE_USER}@${REMOTE_HOST} \
                         "pkill -f send_data_to_kafka.py 2>/dev/null || true; pkill -f write_kafka_to_hbase.py 2>/dev/null || true; sleep 2" 2>&1 | \
                         grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
@@ -98,7 +98,7 @@ pipeline {
                 echo 'Stage 6: Start TFL API → Kafka Producer'
                 echo '========================================='
                 sh '''
-                    sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                    ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                         ${REMOTE_USER}@${REMOTE_HOST} \
                         "nohup python3 ${PROJECT_DIR}/kafka/send_data_to_kafka.py > /tmp/producer_success.log 2>&1 &
                          echo \"Producer PID: \$!\"" 2>&1 | \
@@ -115,7 +115,7 @@ pipeline {
                 echo 'Stage 7: Start Kafka → HBase Consumer'
                 echo '========================================='
                 sh '''
-                    sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                    ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                         ${REMOTE_USER}@${REMOTE_HOST} \
                         "nohup python3 ${PROJECT_DIR}/kafka/write_kafka_to_hbase.py > /tmp/hbase_consumer.log 2>&1 &
                          echo \"Consumer PID: \$!\"" 2>&1 | \
@@ -134,7 +134,7 @@ pipeline {
                 sh '''
                     sleep 30
 
-                    sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                    ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                         ${REMOTE_USER}@${REMOTE_HOST} \
                         "echo '--- Running Processes ---';
                          ps aux | grep -E 'send_data_to_kafka|write_kafka_to_hbase' | grep -v grep;

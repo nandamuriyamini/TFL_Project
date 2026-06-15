@@ -14,7 +14,6 @@ from pyspark.sql.types import (
 
 KAFKA_BROKER = 'ip-172-31-6-42.eu-west-2.compute.internal:9092'
 KAFKA_TOPIC  = 'tfl_arrivals'
-GROUP_ID     = 'yamini_spark_consumer'
 HDFS_OUTPUT  = '/tmp/yamini/tfl_spark_streaming/output'
 CHECKPOINT   = '/tmp/yamini/tfl_spark_streaming/checkpoint'
 RUN_SECS     = 3600  # 1 hour, matches producer duration
@@ -48,7 +47,6 @@ def main():
         .option("subscribe", KAFKA_TOPIC) \
         .option("startingOffsets", "latest") \
         .option("failOnDataLoss", "false") \
-        .option("kafka.group.id", GROUP_ID) \
         .load()
 
     parsed = raw.select(

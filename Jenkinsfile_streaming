@@ -141,10 +141,7 @@ pipeline {
                         -o StrictHostKeyChecking=no \
                         -o UserKnownHostsFile=/dev/null \
                         ${REMOTE_USER}@${REMOTE_HOST} \
-                        "KAFKA_JAR=\$(ls /opt/cloudera/parcels/CDH-7.1.7-1.cdh7.1.7.p0.15945976/lib/spark/jars/spark-sql-kafka* 2>/dev/null | head -1); \
-                         echo \"Kafka Connector JAR: \${KAFKA_JAR:-NOT FOUND}\"; \
-                         nohup spark-submit --master yarn --deploy-mode client --name TFL_Spark_Streaming --num-executors 2 --executor-memory 1g --driver-memory 512m --conf spark.sql.parquet.writeLegacyFormat=true --conf spark.yarn.queue=default \${KAFKA_JAR:+--jars \$KAFKA_JAR} ${PROJECT_DIR}/spark/spark_streaming_tfl.py > /tmp/spark_streaming.log 2>&1 & \
-                         echo \"Spark PID: \$!\"" 2>&1 | \
+                        "nohup spark-submit --master yarn --deploy-mode client --name TFL_Spark_Streaming --num-executors 2 --executor-memory 1g --driver-memory 512m --conf spark.sql.parquet.writeLegacyFormat=true --conf spark.yarn.queue=default ${PROJECT_DIR}/spark/spark_streaming_tfl.py > /tmp/spark_streaming.log 2>&1 & echo \"Spark PID: \$!\"" 2>&1 | \
                         grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
                     echo "Spark Streaming started"
                 '''
@@ -214,7 +211,7 @@ pipeline {
                     sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                         ${REMOTE_USER}@${REMOTE_HOST} \
                         "echo '--- Running Processes (PID CPU START CMD) ---'; \
-                         ps aux | grep -E 'send_data_to_kafka|write_kafka_to_hbase|spark_streaming_tfl' | grep -v grep | awk '{print \$2,\$3,\$9,\$11}'; \
+                         ps aux | grep -E 'send_data_to_kafka|write_kafka_to_hbase|spark_streaming_tfl' | grep -v grep; \
                          echo '--- Producer Log (last 10 lines) ---'; \
                          tail -10 /tmp/producer_success.log 2>/dev/null || echo 'No producer log yet'; \
                          echo '--- Consumer Log (last 10 lines) ---'; \

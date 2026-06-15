@@ -7,6 +7,7 @@ pipeline {
         SSH_KEY          = '/var/lib/jenkins/.ssh/test_key.pem'
         PROJECT_DIR      = '/home/ec2-user/yamini/tfl_Project1'
         HDFS_DIR         = '/tmp/yamini/tfl_project1'
+        HDFS_FULL_LOAD   = '/tmp/yamini/tfl_full_load'
         HIVESERVER2_HOST = '18.175.245.20'
     }
 
@@ -30,7 +31,7 @@ pipeline {
                 sh '''
                     ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                         ${REMOTE_USER}@${REMOTE_HOST} \
-                        "mkdir -p ${PROJECT_DIR}/sqoop ${PROJECT_DIR}/hive" 2>&1 | \
+                        "mkdir -p ${PROJECT_DIR}/sqoop ${PROJECT_DIR}/hive ${PROJECT_DIR}/spark" 2>&1 | \
                         grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
 
                     echo "Directories created"
@@ -50,6 +51,14 @@ pipeline {
 
                     scp -i ${SSH_KEY} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                         src/hive_table.sql ${REMOTE_USER}@${REMOTE_HOST}:${PROJECT_DIR}/hive/ 2>&1 | \
+                        grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
+
+                    scp -i ${SSH_KEY} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                        src/spark/spark_full_load_tfl.py ${REMOTE_USER}@${REMOTE_HOST}:${PROJECT_DIR}/spark/ 2>&1 | \
+                        grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
+
+                    scp -i ${SSH_KEY} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                        src/spark/hive_full_load_table.sql ${REMOTE_USER}@${REMOTE_HOST}:${PROJECT_DIR}/spark/ 2>&1 | \
                         grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
 
                     echo "Scripts copied successfully"
@@ -97,7 +106,12 @@ pipeline {
                 sh '''
                     ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                         ${REMOTE_USER}@${REMOTE_HOST} \
-                        "HADOOP_USER_NAME=hdfs hdfs dfs -rm -r -f -skipTrash ${HDFS_DIR} 2>/dev/null || true; HADOOP_USER_NAME=hdfs hdfs dfs -mkdir -p ${HDFS_DIR}; HADOOP_USER_NAME=hdfs hdfs dfs -chmod 777 ${HDFS_DIR}" 2>&1 | \
+                        "HADOOP_USER_NAME=hdfs hdfs dfs -rm -r -f -skipTrash ${HDFS_DIR} 2>/dev/null || true; \
+                         HADOOP_USER_NAME=hdfs hdfs dfs -mkdir -p ${HDFS_DIR}; \
+                         HADOOP_USER_NAME=hdfs hdfs dfs -chmod 777 ${HDFS_DIR}; \
+                         HADOOP_USER_NAME=hdfs hdfs dfs -rm -r -f -skipTrash ${HDFS_FULL_LOAD} 2>/dev/null || true; \
+                         HADOOP_USER_NAME=hdfs hdfs dfs -mkdir -p ${HDFS_FULL_LOAD}/output; \
+                         HADOOP_USER_NAME=hdfs hdfs dfs -chmod -R 777 ${HDFS_FULL_LOAD}" 2>&1 | \
                         grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
 
                     echo "HDFS cleaned and recreated with open permissions"
@@ -137,10 +151,51 @@ pipeline {
             }
         }
 
+        stage('Run Spark Full Load') {
+            steps {
+                echo '========================================='
+                echo 'Stage 9: Spark Full Load - Kafka → HDFS Parquet (batch)'
+                echo '========================================='
+                sh '''
+                    ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                        ${REMOTE_USER}@${REMOTE_HOST} \
+                        "spark-submit \
+                             --master local[4] \
+                             --name TFL_Full_Load \
+                             --driver-memory 2g \
+                             --conf spark.sql.parquet.writeLegacyFormat=true \
+                             --conf spark.sql.shuffle.partitions=4 \
+                             ${PROJECT_DIR}/spark/spark_full_load_tfl.py" 2>&1 | \
+                        grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
+
+                    echo "Full load completed"
+                '''
+            }
+        }
+
+        stage('Create Hive Full Load Table') {
+            steps {
+                echo '========================================='
+                echo 'Stage 10: Register Hive Full Load Table'
+                echo '========================================='
+                sh '''
+                    ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                        ${REMOTE_USER}@${REMOTE_HOST} \
+                        "echo '--- Full Load HDFS Output ---'; \
+                         hdfs dfs -ls ${HDFS_FULL_LOAD}/output 2>/dev/null || echo 'No output found'; \
+                         echo '--- Full Load Size ---'; \
+                         hdfs dfs -du -s -h ${HDFS_FULL_LOAD}/output 2>/dev/null || echo '0 bytes'; \
+                         echo '--- Creating Hive Full Load Table ---'; \
+                         beeline -u 'jdbc:hive2://${HIVESERVER2_HOST}:10000/default' -n consultant -p 'Cl0ud3ra@2026#Secur3!' -f ${PROJECT_DIR}/spark/hive_full_load_table.sql" 2>&1 | \
+                        grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
+                '''
+            }
+        }
+
         stage('Verify Results') {
             steps {
                 echo '========================================='
-                echo 'Stage 9: Verify HDFS Data'
+                echo 'Stage 11: Verify HDFS Data'
                 echo '========================================='
                 sh '''
                     ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
@@ -158,7 +213,9 @@ pipeline {
             echo 'TFL PIPELINE COMPLETED SUCCESSFULLY'
             echo '========================================='
             echo "Cloudera: ${REMOTE_HOST}:${PROJECT_DIR}"
-            echo "HDFS: ${HDFS_DIR}"
+            echo "HDFS Sqoop : ${HDFS_DIR}"
+            echo "HDFS Full Load: ${HDFS_FULL_LOAD}/output"
+            echo "Hive Full Load: yamini_tfl_proj.tfl_full_load"
             echo '========================================='
         }
         failure {

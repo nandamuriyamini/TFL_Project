@@ -73,8 +73,8 @@ pipeline {
                         "pkill -9 -f send_data_to_kafka.py  2>/dev/null || true; \
                          pkill -9 -f write_kafka_to_hbase.py 2>/dev/null || true; \
                          pkill -9 -f spark_streaming_tfl.py  2>/dev/null || true; \
-                         pkill -9 -f SparkSubmit              2>/dev/null || true; \
-                         sleep 3; \
+                         yarn application -list 2>/dev/null | grep TFL_Spark_Streaming | awk '{print \$1}' | xargs -r yarn application -kill 2>/dev/null || true; \
+                         sleep 5; \
                          echo 'Old processes stopped'" 2>&1 | \
                         grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
                 '''
@@ -189,7 +189,7 @@ pipeline {
                 echo 'Stage 11: Check Spark HDFS Output + Register Hive Table'
                 echo '========================================='
                 sh '''
-                    sleep 120
+                    sleep 180
                     sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                         ${REMOTE_USER}@${REMOTE_HOST} \
                         "echo '--- Spark HDFS Output ---'; \

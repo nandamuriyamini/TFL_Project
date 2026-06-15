@@ -1,0 +1,174 @@
+pipeline {
+    agent any
+
+    environment {
+        REMOTE_HOST     = '13.41.167.97'
+        REMOTE_USER     = 'consultant'
+        REMOTE_PASSWORD = 'Cl0ud3ra@2026#Secur3!'
+        PROJECT_DIR     = '/home/consultant/yamini/tfl_Project1'
+        KAFKA_BROKER    = 'ip-172-31-6-42.eu-west-2.compute.internal:9092'
+        KAFKA_TOPIC     = 'tfl_arrivals'
+        HBASE_TABLE     = 'tfl_arrivals'
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                echo '========================================='
+                echo 'Stage 1: Git Checkout'
+                echo '========================================='
+                checkout scm
+                sh 'git log -1 --oneline'
+            }
+        }
+
+        stage('Prepare Remote Directory') {
+            steps {
+                echo '========================================='
+                echo 'Stage 2: Create Directories on Cloudera'
+                echo '========================================='
+                sh '''
+                    sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                        ${REMOTE_USER}@${REMOTE_HOST} \
+                        "mkdir -p ${PROJECT_DIR}/kafka" 2>&1 | \
+                        grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
+
+                    echo "Directory ready"
+                '''
+            }
+        }
+
+        stage('Copy Kafka Scripts') {
+            steps {
+                echo '========================================='
+                echo 'Stage 3: Copy Producer and Consumer Scripts'
+                echo '========================================='
+                sh '''
+                    sshpass -p "${REMOTE_PASSWORD}" scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                        src/kafka/send_data_to_kafka.py \
+                        ${REMOTE_USER}@${REMOTE_HOST}:${PROJECT_DIR}/kafka/ 2>&1 | \
+                        grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
+
+                    sshpass -p "${REMOTE_PASSWORD}" scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                        src/kafka/write_kafka_to_hbase.py \
+                        ${REMOTE_USER}@${REMOTE_HOST}:${PROJECT_DIR}/kafka/ 2>&1 | \
+                        grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
+
+                    echo "Scripts copied successfully"
+                '''
+            }
+        }
+
+        stage('Create HBase Table') {
+            steps {
+                echo '========================================='
+                echo 'Stage 4: Create HBase Table (if not exists)'
+                echo '========================================='
+                sh '''
+                    sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                        ${REMOTE_USER}@${REMOTE_HOST} \
+                        "echo \"create '${HBASE_TABLE}', 'cf'\" | hbase shell -n 2>/dev/null || true" 2>&1 | \
+                        grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
+
+                    echo "HBase table ready"
+                '''
+            }
+        }
+
+        stage('Stop Existing Processes') {
+            steps {
+                echo '========================================='
+                echo 'Stage 5: Kill Any Previously Running Scripts'
+                echo '========================================='
+                sh '''
+                    sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                        ${REMOTE_USER}@${REMOTE_HOST} \
+                        "pkill -f send_data_to_kafka.py 2>/dev/null || true; pkill -f write_kafka_to_hbase.py 2>/dev/null || true; sleep 2" 2>&1 | \
+                        grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
+
+                    echo "Old processes stopped"
+                '''
+            }
+        }
+
+        stage('Start Kafka Producer') {
+            steps {
+                echo '========================================='
+                echo 'Stage 6: Start TFL API → Kafka Producer'
+                echo '========================================='
+                sh '''
+                    sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                        ${REMOTE_USER}@${REMOTE_HOST} \
+                        "nohup python3 ${PROJECT_DIR}/kafka/send_data_to_kafka.py > /tmp/producer_success.log 2>&1 &
+                         echo \"Producer PID: \$!\"" 2>&1 | \
+                        grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
+
+                    echo "Producer started"
+                '''
+            }
+        }
+
+        stage('Start HBase Consumer') {
+            steps {
+                echo '========================================='
+                echo 'Stage 7: Start Kafka → HBase Consumer'
+                echo '========================================='
+                sh '''
+                    sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                        ${REMOTE_USER}@${REMOTE_HOST} \
+                        "nohup python3 ${PROJECT_DIR}/kafka/write_kafka_to_hbase.py > /tmp/hbase_consumer.log 2>&1 &
+                         echo \"Consumer PID: \$!\"" 2>&1 | \
+                        grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
+
+                    echo "Consumer started"
+                '''
+            }
+        }
+
+        stage('Verify Pipeline') {
+            steps {
+                echo '========================================='
+                echo 'Stage 8: Verify Processes and Data Flow'
+                echo '========================================='
+                sh '''
+                    sleep 30
+
+                    sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                        ${REMOTE_USER}@${REMOTE_HOST} \
+                        "echo '--- Running Processes ---';
+                         ps aux | grep -E 'send_data_to_kafka|write_kafka_to_hbase' | grep -v grep;
+                         echo '--- Producer Log ---';
+                         tail -5 /tmp/producer_success.log 2>/dev/null || echo 'No producer log yet';
+                         echo '--- Consumer Log ---';
+                         tail -5 /tmp/hbase_consumer.log 2>/dev/null || echo 'No consumer log yet';
+                         echo '--- HBase Record Count ---';
+                         echo \"count '${HBASE_TABLE}'\" | hbase shell -n 2>/dev/null | grep -E '^[0-9]' || echo 'Count check done'" 2>&1 | \
+                        grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo '========================================='
+            echo 'TFL STREAMING PIPELINE STARTED SUCCESSFULLY'
+            echo '========================================='
+            echo "Producer and Consumer running on: ${REMOTE_HOST}"
+            echo "Kafka Topic : ${KAFKA_TOPIC}"
+            echo "HBase Table : ${HBASE_TABLE}"
+            echo "Producer log: /tmp/producer_success.log"
+            echo "Consumer log: /tmp/hbase_consumer.log"
+            echo '========================================='
+        }
+        failure {
+            echo '========================================='
+            echo 'TFL STREAMING PIPELINE FAILED - check logs above'
+            echo '========================================='
+        }
+        always {
+            echo 'Pipeline execution completed'
+        }
+    }
+}

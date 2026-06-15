@@ -141,8 +141,8 @@ pipeline {
                         -o StrictHostKeyChecking=no \
                         -o UserKnownHostsFile=/dev/null \
                         ${REMOTE_USER}@${REMOTE_HOST} \
-                        "KAFKA_JAR=\$(find /opt/cloudera/parcels/CDH*/jars/ -name 'spark-sql-kafka-0-10_2.11*.jar' 2>/dev/null | head -1); \
-                         echo \"Kafka JAR: \${KAFKA_JAR}\"; \
+                        "KAFKA_JAR=\$(ls /opt/cloudera/parcels/CDH-7.1.7-1.cdh7.1.7.p0.15945976/lib/spark/jars/spark-sql-kafka* 2>/dev/null | head -1); \
+                         echo \"Kafka Connector JAR: \${KAFKA_JAR:-NOT FOUND}\"; \
                          nohup spark-submit --master yarn --deploy-mode client --name TFL_Spark_Streaming --num-executors 2 --executor-memory 1g --driver-memory 512m --conf spark.sql.parquet.writeLegacyFormat=true --conf spark.yarn.queue=default \${KAFKA_JAR:+--jars \$KAFKA_JAR} ${PROJECT_DIR}/spark/spark_streaming_tfl.py > /tmp/spark_streaming.log 2>&1 & \
                          echo \"Spark PID: \$!\"" 2>&1 | \
                         grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
@@ -219,8 +219,12 @@ pipeline {
                          tail -10 /tmp/producer_success.log 2>/dev/null || echo 'No producer log yet'; \
                          echo '--- Consumer Log (last 10 lines) ---'; \
                          tail -10 /tmp/hbase_consumer.log 2>/dev/null || echo 'No consumer log yet'; \
-                         echo '--- Spark Log (last 30 lines) ---'; \
-                         tail -30 /tmp/spark_streaming.log 2>/dev/null || echo 'No spark log yet'" 2>&1 | \
+                         echo '--- Spark Log Size ---'; \
+                         wc -l /tmp/spark_streaming.log 2>/dev/null || echo 'No spark log'; \
+                         echo '--- Spark Errors and Exceptions ---'; \
+                         grep -E 'AnalysisException|Failed to find|Exception in thread|Caused by:|ERROR.*kafka|data source' /tmp/spark_streaming.log 2>/dev/null | head -20 || echo 'No errors found'; \
+                         echo '--- Spark Log (last 20 lines) ---'; \
+                         tail -20 /tmp/spark_streaming.log 2>/dev/null || echo 'No spark log yet'" 2>&1 | \
                         grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
                 '''
             }

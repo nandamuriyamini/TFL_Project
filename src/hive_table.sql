@@ -11,10 +11,10 @@ CREATE EXTERNAL TABLE IF NOT EXISTS dim_date (
   quarter      INT,
   month        INT,
   is_annual    BOOLEAN,
-  period_name  STRING,
-  start_date   DATE,
-  end_date     DATE,
-  load_ts      TIMESTAMP
+  period_label STRING,
+  period_start DATE,
+  period_end   DATE,
+  created_at   TIMESTAMP
 )
 ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
 STORED AS TEXTFILE
@@ -22,12 +22,12 @@ LOCATION '/tmp/yamini/tfl_project1/dim_date'
 TBLPROPERTIES ('serialization.null.format'='null');
 
 CREATE EXTERNAL TABLE IF NOT EXISTS dim_lines (
-  line_id     INT,
-  line_name   STRING,
-  line_colour STRING,
-  is_active   BOOLEAN,
-  created_ts  TIMESTAMP,
-  updated_ts  TIMESTAMP
+  line_id          INT,
+  line_name        STRING,
+  line_color       STRING,
+  is_night_service BOOLEAN,
+  created_at       TIMESTAMP,
+  updated_at       TIMESTAMP
 )
 ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
 STORED AS TEXTFILE
@@ -38,8 +38,8 @@ CREATE EXTERNAL TABLE IF NOT EXISTS dim_networks (
   network_id   INT,
   network_name STRING,
   network_type STRING,
-  created_ts   TIMESTAMP,
-  updated_ts   TIMESTAMP
+  created_at   TIMESTAMP,
+  updated_at   TIMESTAMP
 )
 ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
 STORED AS TEXTFILE
@@ -47,18 +47,18 @@ LOCATION '/tmp/yamini/tfl_project1/dim_networks'
 TBLPROPERTIES ('serialization.null.format'='null');
 
 CREATE EXTERNAL TABLE IF NOT EXISTS dim_stations (
-  station_id   INT,
-  station_code DOUBLE,
-  station_name STRING,
-  network_id   INT,
-  flag_1       BOOLEAN,
-  flag_2       BOOLEAN,
-  flag_3       BOOLEAN,
-  flag_4       BOOLEAN,
-  flag_5       BOOLEAN,
-  flag_6       BOOLEAN,
-  created_ts   TIMESTAMP,
-  updated_ts   TIMESTAMP
+  station_id              INT,
+  nlc_code                DOUBLE,
+  station_name            STRING,
+  network_id              INT,
+  has_london_underground  BOOLEAN,
+  has_elizabeth_line      BOOLEAN,
+  has_overground          BOOLEAN,
+  has_dlr                 BOOLEAN,
+  has_night_tube          BOOLEAN,
+  is_active               BOOLEAN,
+  created_at              TIMESTAMP,
+  updated_at              TIMESTAMP
 )
 ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
 STORED AS TEXTFILE

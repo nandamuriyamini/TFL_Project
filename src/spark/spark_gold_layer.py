@@ -87,18 +87,18 @@ def main():
         JOIN   dim_date d ON f.date_id = d.date_id
         GROUP  BY d.year, d.quarter
         ORDER  BY d.year, d.quarter
-    """).write.mode("overwrite").parquet(f"{HDFS_GOLD}/gold_night_tube_analysis")
+    """).write.mode("overwrite").parquet(f"{HDFS_GOLD}/gold_quarterly_trend")
 
-    # ── 7. Night tube analysis (flag_1 = night tube service) ────────
+    # ── 7. Night tube analysis ───────────────────────────────────────
     print("[7/7] gold_night_tube_analysis")
     spark.sql("""
-        SELECT s.flag_1                   AS has_night_tube,
+        SELECT s.has_night_tube,
                COUNT(f.entry_exit_id)     AS num_records,
                SUM(f.total_entry_exit)    AS total_passengers,
                AVG(f.total_entry_exit)    AS avg_passengers_per_record
         FROM   fact_passenger_entry_exit f
         JOIN   dim_stations s ON f.station_id = s.station_id
-        GROUP  BY s.flag_1
+        GROUP  BY s.has_night_tube
     """).write.mode("overwrite").parquet(f"{HDFS_GOLD}/gold_night_tube_analysis")
 
     print("\n" + "=" * 60)

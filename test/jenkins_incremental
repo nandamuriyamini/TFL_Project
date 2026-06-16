@@ -1,0 +1,185 @@
+pipeline {
+    agent any
+
+    parameters {
+        string(
+            name: 'INCREMENTAL_YEAR',
+            defaultValue: '2020',
+            description: 'Year to load incrementally (e.g. 2020, 2021, 2022)'
+        )
+    }
+
+    environment {
+        REMOTE_HOST      = '13.41.167.97'
+        REMOTE_USER      = 'consultant'
+        REMOTE_PASSWORD  = 'Cl0ud3ra@2026#Secur3!'
+        PROJECT_DIR      = '/home/consultant/yamini/tfl_Project1'
+        HDFS_BASE        = '/tmp/yamini/tfl_project1'
+        HDFS_INC         = '/tmp/yamini/tfl_project1/incremental'
+        HDFS_GOLD        = '/tmp/yamini/tfl_project1/gold'
+        HIVESERVER2_HOST = '18.175.245.20'
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                echo '========================================='
+                echo 'Stage 1: Git Checkout'
+                echo '========================================='
+                checkout scm
+                sh 'git log -1 --oneline'
+            }
+        }
+
+        stage('Prepare Remote Directories') {
+            steps {
+                echo '========================================='
+                echo 'Stage 2: Create Directories on Cloudera'
+                echo '========================================='
+                sh '''
+                    sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                        ${REMOTE_USER}@${REMOTE_HOST} \
+                        "mkdir -p ${PROJECT_DIR}/sqoop ${PROJECT_DIR}/spark" 2>&1 | \
+                        grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
+                    echo "Directories created"
+                '''
+            }
+        }
+
+        stage('Copy Incremental Scripts') {
+            steps {
+                echo '========================================='
+                echo 'Stage 3: Copy sqoop_incremental.sh + incremental_spark.py'
+                echo '========================================='
+                sh '''
+                    sshpass -p "${REMOTE_PASSWORD}" scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                        src/sqoop_incremental.sh ${REMOTE_USER}@${REMOTE_HOST}:${PROJECT_DIR}/sqoop/ 2>&1 | \
+                        grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
+
+                    sshpass -p "${REMOTE_PASSWORD}" scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                        src/spark/incremental_spark.py ${REMOTE_USER}@${REMOTE_HOST}:${PROJECT_DIR}/spark/ 2>&1 | \
+                        grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
+
+                    echo "Scripts copied successfully"
+                '''
+            }
+        }
+
+        stage('Set Permissions') {
+            steps {
+                echo '========================================='
+                echo 'Stage 4: Set Execute Permissions'
+                echo '========================================='
+                sh '''
+                    sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                        ${REMOTE_USER}@${REMOTE_HOST} \
+                        "chmod +x ${PROJECT_DIR}/sqoop/sqoop_incremental.sh" 2>&1 | \
+                        grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
+                    echo "Permissions set"
+                '''
+            }
+        }
+
+        stage('Clean Incremental HDFS') {
+            steps {
+                echo '========================================='
+                echo 'Stage 5: Clean Incremental HDFS Only (gold preserved)'
+                echo '========================================='
+                sh '''
+                    sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                        ${REMOTE_USER}@${REMOTE_HOST} \
+                        "HADOOP_USER_NAME=hdfs hdfs dfs -rm -r -f -skipTrash ${HDFS_INC} 2>/dev/null || true; \
+                         HADOOP_USER_NAME=hdfs hdfs dfs -mkdir -p ${HDFS_INC}; \
+                         HADOOP_USER_NAME=hdfs hdfs dfs -chmod -R 777 ${HDFS_INC}; \
+                         echo '--- Confirming gold tables still exist ---'; \
+                         hdfs dfs -ls ${HDFS_GOLD} 2>/dev/null || echo 'WARNING: gold dir not found - run full load first'" 2>&1 | \
+                        grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
+                    echo "Incremental HDFS cleaned - gold data preserved"
+                '''
+            }
+        }
+
+        stage('Incremental Sqoop Import') {
+            steps {
+                echo '========================================='
+                echo "Stage 6: Sqoop Import for year ${INCREMENTAL_YEAR}"
+                echo '========================================='
+                sh '''
+                    sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                        ${REMOTE_USER}@${REMOTE_HOST} \
+                        "bash ${PROJECT_DIR}/sqoop/sqoop_incremental.sh ${INCREMENTAL_YEAR}" 2>&1 | \
+                        grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
+                    echo "Incremental Sqoop completed for year ${INCREMENTAL_YEAR}"
+                '''
+            }
+        }
+
+        stage('Run Incremental Spark') {
+            steps {
+                echo '========================================='
+                echo 'Stage 7: Run Incremental Spark - Merge into Gold Tables'
+                echo '========================================='
+                sh '''
+                    sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                        ${REMOTE_USER}@${REMOTE_HOST} \
+                        "spark-submit \
+                             --master local[4] \
+                             --name TFL_Incremental \
+                             --driver-memory 2g \
+                             --conf spark.sql.parquet.writeLegacyFormat=true \
+                             --conf spark.sql.shuffle.partitions=4 \
+                             ${PROJECT_DIR}/spark/incremental_spark.py" 2>&1 | \
+                        grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
+                    echo "Incremental Spark completed"
+                '''
+            }
+        }
+
+        stage('Verify Gold Tables') {
+            steps {
+                echo '========================================='
+                echo 'Stage 8: Verify Updated Gold Table Counts'
+                echo '========================================='
+                sh '''
+                    sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                        ${REMOTE_USER}@${REMOTE_HOST} \
+                        "echo '--- Gold HDFS Output ---'; \
+                         hdfs dfs -ls ${HDFS_GOLD} 2>/dev/null || echo 'No gold output found'; \
+                         echo '--- Gold Table Record Counts ---'; \
+                         beeline -u 'jdbc:hive2://${HIVESERVER2_HOST}:10000/default' \
+                             -n consultant -p 'Cl0ud3ra@2026#Secur3!' \
+                             -e 'USE yamini_tfl_proj; \
+                                 SELECT \"busiest_stations\"    AS gold_table, COUNT(*) AS rows FROM gold_busiest_stations UNION ALL \
+                                 SELECT \"passengers_by_year\"  AS gold_table, COUNT(*) AS rows FROM gold_passengers_by_year UNION ALL \
+                                 SELECT \"passengers_by_line\"  AS gold_table, COUNT(*) AS rows FROM gold_passengers_by_line UNION ALL \
+                                 SELECT \"passengers_by_net\"   AS gold_table, COUNT(*) AS rows FROM gold_passengers_by_network UNION ALL \
+                                 SELECT \"interchange\"         AS gold_table, COUNT(*) AS rows FROM gold_interchange_stations UNION ALL \
+                                 SELECT \"quarterly_trend\"     AS gold_table, COUNT(*) AS rows FROM gold_quarterly_trend UNION ALL \
+                                 SELECT \"night_tube\"          AS gold_table, COUNT(*) AS rows FROM gold_night_tube_analysis;'" 2>&1 | \
+                        grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo '========================================='
+            echo "INCREMENTAL PIPELINE COMPLETE"
+            echo "Year loaded : ${INCREMENTAL_YEAR}"
+            echo "HDFS Inc    : ${HDFS_INC}"
+            echo "HDFS Gold   : ${HDFS_GOLD}"
+            echo "Hive DB     : yamini_tfl_proj.gold_*"
+            echo '========================================='
+        }
+        failure {
+            echo '========================================='
+            echo 'INCREMENTAL PIPELINE FAILED - check logs above'
+            echo '========================================='
+        }
+        always {
+            echo 'Pipeline execution completed'
+        }
+    }
+}

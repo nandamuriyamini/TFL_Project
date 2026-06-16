@@ -1,6 +1,10 @@
 CREATE DATABASE IF NOT EXISTS yamini_tfl_proj;
 USE yamini_tfl_proj;
 
+-- ─────────────────────────────────────────────
+-- DIMENSION TABLES
+-- ─────────────────────────────────────────────
+
 CREATE EXTERNAL TABLE IF NOT EXISTS dim_date (
   date_id      INT,
   year         INT,
@@ -61,6 +65,10 @@ STORED AS TEXTFILE
 LOCATION '/tmp/yamini/tfl_project1/dim_stations'
 TBLPROPERTIES ('serialization.null.format'='null');
 
+-- ─────────────────────────────────────────────
+-- FACT TABLES
+-- ─────────────────────────────────────────────
+
 CREATE EXTERNAL TABLE IF NOT EXISTS fact_station_lines (
   station_line_id INT,
   station_id      INT,
@@ -91,33 +99,79 @@ STORED AS TEXTFILE
 LOCATION '/tmp/yamini/tfl_project1/fact_passenger_entry_exit'
 TBLPROPERTIES ('serialization.null.format'='null');
 
--- Busiest stations per year
-SELECT d.year,
-       s.station_name,
-       SUM(f.total_entry_exit) AS total_passengers
-FROM fact_passenger_entry_exit f
-JOIN dim_date d
-  ON f.date_id = d.date_id
-JOIN dim_stations s
-  ON f.station_id = s.station_id
-GROUP BY d.year, s.station_name
-ORDER BY d.year DESC, total_passengers DESC;
+-- ─────────────────────────────────────────────
+-- INCREMENTAL WATERMARK
+-- ─────────────────────────────────────────────
 
--- Passengers by line
-SELECT l.line_name,
-       SUM(f.total_entry_exit) AS total_passengers
-FROM fact_passenger_entry_exit f
-JOIN fact_station_lines b
-    ON f.station_id = b.station_id
-JOIN dim_lines l
-    ON b.line_id = l.line_id
-GROUP BY l.line_name
-ORDER BY total_passengers DESC;
+CREATE TABLE IF NOT EXISTS yamini_tfl_proj.incremental_watermark (
+  source_table   STRING,
+  processed_year INT,
+  processed_at   TIMESTAMP
+)
+STORED AS PARQUET
+LOCATION '/tmp/yamini/tfl_project1/incremental_watermark';
 
--- Year-over-year total ridership trend
-SELECT s.station_name, COUNT(b.line_id) AS num_lines
-FROM dim_stations s
-JOIN fact_station_lines b ON s.station_id = b.station_id
-GROUP BY s.station_name
-ORDER BY num_lines DESC;
+-- ─────────────────────────────────────────────
+-- GOLD LAYER TABLES (drop and recreate each run)
+-- ─────────────────────────────────────────────
 
+DROP TABLE IF EXISTS yamini_tfl_proj.gold_busiest_stations;
+DROP TABLE IF EXISTS yamini_tfl_proj.gold_passengers_by_year;
+DROP TABLE IF EXISTS yamini_tfl_proj.gold_passengers_by_line;
+DROP TABLE IF EXISTS yamini_tfl_proj.gold_passengers_by_network;
+DROP TABLE IF EXISTS yamini_tfl_proj.gold_interchange_stations;
+DROP TABLE IF EXISTS yamini_tfl_proj.gold_quarterly_trend;
+DROP TABLE IF EXISTS yamini_tfl_proj.gold_night_tube_analysis;
+
+CREATE EXTERNAL TABLE yamini_tfl_proj.gold_busiest_stations (
+  station_name     STRING,
+  total_passengers BIGINT
+)
+STORED AS PARQUET
+LOCATION '/tmp/yamini/tfl_project1/gold/gold_busiest_stations';
+
+CREATE EXTERNAL TABLE yamini_tfl_proj.gold_passengers_by_year (
+  year             INT,
+  total_passengers BIGINT
+)
+STORED AS PARQUET
+LOCATION '/tmp/yamini/tfl_project1/gold/gold_passengers_by_year';
+
+CREATE EXTERNAL TABLE yamini_tfl_proj.gold_passengers_by_line (
+  line_name        STRING,
+  total_passengers BIGINT
+)
+STORED AS PARQUET
+LOCATION '/tmp/yamini/tfl_project1/gold/gold_passengers_by_line';
+
+CREATE EXTERNAL TABLE yamini_tfl_proj.gold_passengers_by_network (
+  network_name     STRING,
+  network_type     STRING,
+  total_passengers BIGINT
+)
+STORED AS PARQUET
+LOCATION '/tmp/yamini/tfl_project1/gold/gold_passengers_by_network';
+
+CREATE EXTERNAL TABLE yamini_tfl_proj.gold_interchange_stations (
+  station_name STRING,
+  num_lines    BIGINT
+)
+STORED AS PARQUET
+LOCATION '/tmp/yamini/tfl_project1/gold/gold_interchange_stations';
+
+CREATE EXTERNAL TABLE yamini_tfl_proj.gold_quarterly_trend (
+  year             INT,
+  quarter          INT,
+  total_passengers BIGINT
+)
+STORED AS PARQUET
+LOCATION '/tmp/yamini/tfl_project1/gold/gold_quarterly_trend';
+
+CREATE EXTERNAL TABLE yamini_tfl_proj.gold_night_tube_analysis (
+  has_night_tube            BOOLEAN,
+  num_records               BIGINT,
+  total_passengers          BIGINT,
+  avg_passengers_per_record DOUBLE
+)
+STORED AS PARQUET
+LOCATION '/tmp/yamini/tfl_project1/gold/gold_night_tube_analysis';

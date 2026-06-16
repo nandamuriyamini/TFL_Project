@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>TFL Streaming Pipeline – Step-by-Step Guide</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; color: #1a1a1a; background: #fff; }
+  .cover { page-break-after: always; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 100vh; background: #0d1f3c; color: #fff; text-align: center; padding: 60px 40px; }
+  .cover h1 { font-size: 36px; font-weight: 700; margin-bottom: 16px; color: #4fc3f7; }
+  .cover h2 { font-size: 20px; font-weight: 400; color: #b0bec5; margin-bottom: 40px; }
+  .cover .meta { font-size: 13px; color: #78909c; }
+  .cover .pipeline { background: #1b3260; border-radius: 12px; padding: 28px 40px; margin: 40px 0; display: inline-block; }
+  .cover .pipeline p { font-size: 18px; color: #e3f2fd; letter-spacing: 1px; }
+  .cover .arrow { color: #4fc3f7; font-size: 22px; margin: 6px 0; }
+
+  .toc { page-break-after: always; padding: 60px 80px; }
+  .toc h2 { font-size: 24px; color: #0d1f3c; border-bottom: 3px solid #4fc3f7; padding-bottom: 10px; margin-bottom: 30px; }
+  .toc ol { padding-left: 20px; }
+  .toc li { padding: 6px 0; font-size: 14px; color: #333; }
+  .toc li a { color: #0d47a1; text-decoration: none; }
+
+  .page { padding: 50px 70px; page-break-before: always; }
+  .page:first-of-type { page-break-before: avoid; }
+
+  h2.section { font-size: 22px; color: #0d1f3c; border-left: 5px solid #4fc3f7; padding-left: 14px; margin-bottom: 24px; margin-top: 0; }
+  h3 { font-size: 15px; color: #1565c0; margin: 22px 0 10px 0; }
+  h4 { font-size: 13px; color: #37474f; margin: 16px 0 6px 0; font-weight: 600; }
+
+  p { line-height: 1.7; margin-bottom: 12px; color: #333; }
+  ul, ol { padding-left: 22px; margin-bottom: 14px; }
+  li { line-height: 1.8; color: #333; }
+
+  .arch-box { background: #e3f2fd; border: 1px solid #90caf9; border-radius: 8px; padding: 20px 28px; margin: 20px 0; font-family: monospace; font-size: 13px; line-height: 2; color: #0d1f3c; }
+  .arch-box .arrow { color: #1565c0; font-weight: bold; }
+
+  pre { background: #1e1e1e; color: #d4d4d4; border-radius: 6px; padding: 18px 20px; overflow-x: auto; font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.6; margin: 12px 0 18px 0; }
+  code { font-family: 'Courier New', monospace; background: #f0f4f8; color: #b71c1c; padding: 2px 5px; border-radius: 3px; font-size: 12px; }
+
+  .step { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 18px 22px; margin: 16px 0; }
+  .step-num { display: inline-block; background: #0d47a1; color: #fff; border-radius: 50%; width: 26px; height: 26px; text-align: center; line-height: 26px; font-size: 13px; font-weight: 700; margin-right: 10px; }
+  .step-title { font-weight: 600; font-size: 14px; color: #0d1f3c; }
+
+  .note { background: #fff8e1; border-left: 4px solid #ffc107; border-radius: 4px; padding: 12px 16px; margin: 14px 0; font-size: 12.5px; color: #5d4037; }
+  .warn { background: #fce4ec; border-left: 4px solid #e53935; border-radius: 4px; padding: 12px 16px; margin: 14px 0; font-size: 12.5px; color: #b71c1c; }
+  .success { background: #e8f5e9; border-left: 4px solid #43a047; border-radius: 4px; padding: 12px 16px; margin: 14px 0; font-size: 12.5px; color: #1b5e20; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 12.5px; }
+  th { background: #0d1f3c; color: #fff; padding: 10px 14px; text-align: left; }
+  td { padding: 9px 14px; border-bottom: 1px solid #dee2e6; }
+  tr:nth-child(even) td { background: #f8f9fa; }
+
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; margin-left: 8px; }
+  .badge-blue { background: #e3f2fd; color: #0d47a1; }
+  .badge-green { background: #e8f5e9; color: #2e7d32; }
+
+  .divider { border: none; border-top: 1px solid #e0e0e0; margin: 28px 0; }
+
+  @media print {
+    body { font-size: 12px; }
+    .cover { min-height: 100vh; }
+    .page { page-break-before: always; }
+    pre { font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- COVER PAGE -->
+<div class="cover">
+  <h1>TFL Streaming Pipeline</h1>
+  <h2>Step-by-Step Practical Guide</h2>
+  <div class="pipeline">
+    <p>TFL API (Transport for London)</p>
+    <p class="arrow">↓</p>
+    <p>Apache Kafka</p>
+    <p class="arrow">↓ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ↓</p>
+    <p>HBase Consumer &nbsp;&nbsp;&nbsp; Spark Structured Streaming</p>
+    <p class="arrow">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ↓</p>
+    <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; HDFS Parquet</p>
+    <p class="arrow">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ↓</p>
+    <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Hive External Table</p>
+  </div>
+  <div class="meta">
+    <p>Cloudera Data Platform (CDH 7.1.7) &nbsp;|&nbsp; Spark 2.4 &nbsp;|&nbsp; Kafka &nbsp;|&nbsp; HBase &nbsp;|&nbsp; Hive 3.1.3</p>
+    <p style="margin-top:8px;">Author: Yamini &nbsp;|&nbsp; 2026</p>
+  </div>
+</div>
+
+<!-- TABLE OF CONTENTS -->
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><a href="#s1">Architecture Overview</a></li>
+    <li><a href="#s2">Prerequisites &amp; Environment</a></li>
+    <li><a href="#s3">Step 1 – Kafka Topic Setup</a></li>
+    <li><a href="#s4">Step 2 – TFL API → Kafka Producer</a></li>
+    <li><a href="#s5">Step 3 – Kafka → HBase Consumer</a></li>
+    <li><a href="#s6">Step 4 – Spark Structured Streaming Job</a></li>
+    <li><a href="#s7">Step 5 – HDFS Directory Preparation</a></li>
+    <li><a href="#s8">Step 6 – Hive External Table</a></li>
+    <li><a href="#s9">Step 7 – Running Everything Together</a></li>
+    <li><a href="#s10">Step 8 – Verifying the Output</a></li>
+    <li><a href="#s11">Jenkins Pipeline Integration</a></li>
+    <li><a href="#s12">Common Errors &amp; Fixes</a></li>
+    <li><a href="#s13">Key Concepts Summary</a></li>
+  </ol>
+</div>
+
+<!-- SECTION 1: ARCHITECTURE -->
+<div class="page" id="s1">
+  <h2 class="section">1. Architecture Overview</h2>
+  <p>This pipeline ingests real-time bus and tube arrival predictions from the Transport for London (TFL) API, streams them through Kafka, and loads them into both HBase (for low-latency lookups) and HDFS Parquet (for analytics via Hive).</p>
+
+  <div class="arch-box">
+    <strong>Pipeline Flow</strong><br/><br/>
+    TFL Arrivals API (REST)
+    <span class="arrow">&nbsp;→&nbsp;</span> send_data_to_kafka.py (Producer)
+    <span class="arrow">&nbsp;→&nbsp;</span> Kafka Topic: <strong>tfl_arrivals</strong><br/><br/>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    <span class="arrow">↙&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↘</span><br/>
+    write_kafka_to_hbase.py &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; spark_streaming_tfl.py<br/>
+    (HBase Consumer) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (Spark Structured Streaming)<br/>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓<br/>
+    HBase Table: tfl_arrivals &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; HDFS Parquet<br/>
+    (row key: station_vehicle_ts) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓<br/>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Hive External Table<br/>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; yamini_tfl_proj.tfl_spark_arrivals
+  </div>
+
+  <h3>Component Roles</h3>
+  <table>
+    <tr><th>Component</th><th>Role</th><th>Technology</th></tr>
+    <tr><td>TFL API</td><td>Source of real-time bus/tube arrival predictions</td><td>REST API (JSON)</td></tr>
+    <tr><td>Kafka</td><td>Message broker — decouples producer from consumers</td><td>Apache Kafka (CDH)</td></tr>
+    <tr><td>Producer</td><td>Polls TFL API every 30s, publishes JSON to Kafka</td><td>Python + kafka-python</td></tr>
+    <tr><td>HBase Consumer</td><td>Reads from Kafka, writes records to HBase in batches of 20</td><td>Python + kafka-python + HBase Shell</td></tr>
+    <tr><td>Spark Streaming</td><td>Reads Kafka micro-batches every 60s, writes Parquet to HDFS</td><td>PySpark Structured Streaming</td></tr>
+    <tr><td>Hive</td><td>SQL analytics layer on top of Parquet files</td><td>Hive 3.1.3 / Beeline</td></tr>
+  </table>
+</div>
+
+<!-- SECTION 2: PREREQUISITES -->
+<div class="page" id="s2">
+  <h2 class="section">2. Prerequisites &amp; Environment</h2>
+
+  <h3>Cluster Details</h3>
+  <table>
+    <tr><th>Resource</th><th>Value</th></tr>
+    <tr><td>Cloudera Edge Node (SSH)</td><td>consultant@&lt;your-host&gt;</td></tr>
+    <tr><td>Kafka Broker</td><td>ip-172-31-6-42.eu-west-2.compute.internal:9092</td></tr>
+    <tr><td>HiveServer2</td><td>&lt;hiveserver2-host&gt;:10000</td></tr>
+    <tr><td>Platform</td><td>CDH 7.1.7 (Spark 2.4, Hive 3.1.3)</td></tr>
+    <tr><td>Python</td><td>Python 3 (python3)</td></tr>
+  </table>
+
+  <h3>Python Libraries Required</h3>
+  <pre>pip3 install kafka-python requests</pre>
+
+  <div class="note">
+    <strong>Note:</strong> On CDH, the Spark-Kafka connector is already bundled — you do <strong>not</strong> need to pass <code>--jars</code> when running spark-submit. Spark 2.4 on CDH includes it in the default classpath.
+  </div>
+
+  <h3>TFL API Key</h3>
+  <p>Register at <strong>api.tfl.gov.uk</strong> to get a free API key. The producer script calls the <code>/StopPoint/{id}/Arrivals</code> endpoint for multiple stops.</p>
+
+  <h3>Project Directory Structure</h3>
+  <pre>/home/consultant/yamini/tfl_Project1/
+├── kafka/
+│   ├── send_data_to_kafka.py       ← TFL API Producer
+│   └── write_kafka_to_hbase.py     ← HBase Consumer
+└── spark/
+    ├── spark_streaming_tfl.py      ← Spark Structured Streaming
+    └── hive_spark_table.sql        ← Hive DDL</pre>
+
+  <h3>HDFS Directories</h3>
+  <pre>HADOOP_USER_NAME=hdfs hdfs dfs -mkdir -p /tmp/yamini/tfl_spark_streaming/output
+HADOOP_USER_NAME=hdfs hdfs dfs -mkdir -p /tmp/yamini/tfl_spark_streaming/checkpoint
+HADOOP_USER_NAME=hdfs hdfs dfs -chmod -R 777 /tmp/yamini/tfl_spark_streaming</pre>
+
+  <div class="note">
+    <strong>Why HADOOP_USER_NAME=hdfs?</strong> The <code>consultant</code> Linux user does not own the <code>/tmp</code> HDFS directory. Prefixing with <code>HADOOP_USER_NAME=hdfs</code> impersonates the HDFS superuser for that command, bypassing permission checks.
+  </div>
+</div>
+
+<!-- SECTION 3: KAFKA SETUP -->
+<div class="page" id="s3">
+  <h2 class="section">3. Step 1 – Kafka Topic Setup</h2>
+  <p>Before running anything, create the Kafka topic that the producer will write to and the consumers will read from.</p>
+
+  <div class="step">
+    <span class="step-num">1</span><span class="step-title">Create the Kafka topic</span>
+  </div>
+  <pre>kafka-topics --bootstrap-server ip-172-31-6-42.eu-west-2.compute.internal:9092 \
+  --create \
+  --topic tfl_arrivals \
+  --partitions 4 \
+  --replication-factor 1</pre>
+
+  <div class="step">
+    <span class="step-num">2</span><span class="step-title">Verify the topic was created</span>
+  </div>
+  <pre>kafka-topics --bootstrap-server ip-172-31-6-42.eu-west-2.compute.internal:9092 \
+  --describe --topic tfl_arrivals</pre>
+
+  <div class="step">
+    <span class="step-num">3</span><span class="step-title">Check message count (after data starts flowing)</span>
+  </div>
+  <pre>kafka-run-class kafka.tools.GetOffsetShell \
+  --broker-list ip-172-31-6-42.eu-west-2.compute.internal:9092 \
+  --topic tfl_arrivals \
+  --time -1</pre>
+
+  <div class="note">
+    <strong>Topic design:</strong> 4 partitions allow both consumers (HBase + Spark) to read in parallel. With <code>replication-factor 1</code> this is a single-broker setup — use 3 for production.
+  </div>
+
+  <h3>How Kafka Works in This Pipeline</h3>
+  <table>
+    <tr><th>Concept</th><th>This Pipeline</th></tr>
+    <tr><td>Topic</td><td>tfl_arrivals — one topic for all arrival data</td></tr>
+    <tr><td>Producer</td><td>send_data_to_kafka.py — one producer, no consumer group</td></tr>
+    <tr><td>Consumer Group (HBase)</td><td>yamini_tfl_hbase_consumer — tracks its own offsets</td></tr>
+    <tr><td>Consumer (Spark)</td><td>No group ID — Spark tracks offsets via checkpoint directory</td></tr>
+    <tr><td>Retention</td><td>Default 7 days — messages persist even if consumers are down</td></tr>
+  </table>
+
+  <div class="warn">
+    <strong>Important:</strong> Spark Structured Streaming does NOT support <code>kafka.group.id</code> in Spark 2.4. Never pass <code>.option("kafka.group.id", ...)</code> — it will throw an <code>IllegalArgumentException</code>. Spark manages its own offsets through the checkpoint directory.
+  </div>
+</div>
+
+<!-- SECTION 4: PRODUCER -->
+<div class="page" id="s4">
+  <h2 class="section">4. Step 2 – TFL API → Kafka Producer</h2>
+  <p>The producer polls the TFL Arrivals API every 30 seconds and publishes each arrival prediction as a JSON message to the <code>tfl_arrivals</code> Kafka topic.</p>
+
+  <h3>File: kafka/send_data_to_kafka.py</h3>
+  <pre>#!/usr/bin/env python3
+import json, time, requests
+from kafka import KafkaProducer
+
+KAFKA_BROKER = 'ip-172-31-6-42.eu-west-2.compute.internal:9092'
+TOPIC        = 'tfl_arrivals'
+API_KEY      = 'YOUR_TFL_API_KEY'
+RUN_SECS     = 3600   # run for 1 hour
+
+# A sample of London bus/tube stop IDs
+STOP_IDS = ['490003035W', '490000077A', '490000123E', '940GZZLUWSP']
+
+producer = KafkaProducer(
+    bootstrap_servers=KAFKA_BROKER,
+    value_serializer=lambda v: json.dumps(v).encode('utf-8')
+)
+
+start = time.time()
+while time.time() - start &lt; RUN_SECS:
+    for stop_id in STOP_IDS:
+        url = f'https://api.tfl.gov.uk/StopPoint/{stop_id}/Arrivals?app_key={API_KEY}'
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 200:
+            for arrival in resp.json():
+                record = {
+                    'id':              arrival.get('id'),
+                    'vehicleId':       arrival.get('vehicleId'),
+                    'stationName':     arrival.get('stationName'),
+                    'lineName':        arrival.get('lineName'),
+                    'platformName':    arrival.get('platformName'),
+                    'expectedArrival': arrival.get('expectedArrival'),
+                    'timeToStation':   arrival.get('timeToStation'),
+                    'currentLocation': arrival.get('currentLocation'),
+                    'direction':       arrival.get('direction'),
+                    'destinationName': arrival.get('destinationName'),
+                    'timestamp':       arrival.get('timestamp'),
+                }
+                producer.send(TOPIC, value=record)
+    producer.flush()
+    print(f"Batch sent. Sleeping 30s...")
+    time.sleep(30)
+
+producer.close()
+print("Producer finished.")</pre>
+
+  <h3>Key Points</h3>
+  <ul>
+    <li>Each TFL arrival prediction has a unique <code>id</code> field — used later for deduplication</li>
+    <li>The producer runs for 3600 seconds (1 hour) then exits cleanly</li>
+    <li><code>producer.flush()</code> ensures all messages are sent before sleeping</li>
+    <li>Messages are serialised as UTF-8 JSON strings</li>
+  </ul>
+
+  <h4>Run the producer (background)</h4>
+  <pre>nohup python3 /home/consultant/yamini/tfl_Project1/kafka/send_data_to_kafka.py \
+  > /tmp/producer.log 2>&amp;1 &amp;
+echo "Producer PID: $!"</pre>
+
+  <h4>Monitor the producer</h4>
+  <pre>tail -f /tmp/producer.log</pre>
+</div>
+
+<!-- SECTION 5: HBASE CONSUMER -->
+<div class="page" id="s5">
+  <h2 class="section">5. Step 3 – Kafka → HBase Consumer</h2>
+  <p>The HBase consumer reads arrival messages from Kafka and writes them to HBase in batches of 20 records using the HBase shell.</p>
+
+  <h3>First: Create the HBase Table</h3>
+  <pre>hbase shell
+hbase(main):001:0> create 'tfl_arrivals', 'cf'
+hbase(main):002:0> list
+hbase(main):003:0> exit</pre>
+
+  <div class="note">
+    <strong>Row key design:</strong> <code>{stationName}_{vehicleId}_{timestamp}</code> — this ensures each unique arrival event gets its own row and allows fast lookups by station + vehicle.
+  </div>
+
+  <h3>File: kafka/write_kafka_to_hbase.py</h3>
+  <pre>#!/usr/bin/env python3
+import json, logging, subprocess
+from kafka import KafkaConsumer
+
+KAFKA_BROKER = 'ip-172-31-6-42.eu-west-2.compute.internal:9092'
+TOPIC        = 'tfl_arrivals'
+HBASE_TABLE  = 'tfl_arrivals'
+GROUP_ID     = 'yamini_tfl_hbase_consumer'
+BATCH_SIZE   = 20
+
+logging.basicConfig(filename='/tmp/hbase_consumer.log', level=logging.INFO,
+                    format='%(asctime)s %(levelname)s %(message)s')
+
+def build_row_key(record):
+    station   = record.get('stationName', '').replace(' ', '')
+    vehicle   = record.get('vehicleId', '')
+    timestamp = record.get('timestamp', '')
+    return f"{station}_{vehicle}_{timestamp}"
+
+def write_batch_to_hbase(records):
+    commands = []
+    for r in records:
+        rk = build_row_key(r)
+        commands.append(f"put '{HBASE_TABLE}', '{rk}', 'cf:station', '{r.get('stationName','')}'")
+        commands.append(f"put '{HBASE_TABLE}', '{rk}', 'cf:vehicle', '{r.get('vehicleId','')}'")
+        commands.append(f"put '{HBASE_TABLE}', '{rk}', 'cf:line',    '{r.get('lineName','')}'")
+        commands.append(f"put '{HBASE_TABLE}', '{rk}', 'cf:arrival', '{r.get('expectedArrival','')}'")
+    hbase_input = '\n'.join(commands) + '\nexit\n'
+    subprocess.run(['hbase', 'shell', '-n'], input=hbase_input.encode('utf-8'),
+                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+    logging.info("Wrote %d records to HBase", len(records))
+
+consumer = KafkaConsumer(
+    TOPIC,
+    bootstrap_servers=KAFKA_BROKER,
+    auto_offset_reset='latest',
+    group_id=GROUP_ID,
+    value_deserializer=lambda x: json.loads(x.decode('utf-8')),
+    enable_auto_commit=True
+)
+
+batch, total = [], 0
+for message in consumer:
+    batch.append(message.value)
+    if len(batch) >= BATCH_SIZE:
+        write_batch_to_hbase(batch)
+        total += len(batch)
+        print(f"Written {total} records to HBase")
+        batch = []</pre>
+
+  <h4>Run the consumer (background)</h4>
+  <pre>nohup python3 /home/consultant/yamini/tfl_Project1/kafka/write_kafka_to_hbase.py \
+  > /tmp/hbase_consumer.log 2>&amp;1 &amp;</pre>
+
+  <h4>Verify HBase records</h4>
+  <pre>echo "count 'tfl_arrivals'" | hbase shell -n 2>/dev/null | grep -E "^[0-9]|row"
+echo "scan 'tfl_arrivals', {LIMIT => 3}" | hbase shell -n 2>/dev/null</pre>
+</div>
+
+<!-- SECTION 6: SPARK STREAMING -->
+<div class="page" id="s6">
+  <h2 class="section">6. Step 4 – Spark Structured Streaming Job</h2>
+  <p>The Spark job reads messages from Kafka as micro-batches every 60 seconds, parses the JSON, adds an ingestion timestamp, and writes Parquet files to HDFS.</p>
+
+  <h3>File: spark/spark_streaming_tfl.py</h3>
+  <pre>#!/usr/bin/env python3
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, from_json, current_timestamp
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType
+
+KAFKA_BROKER = 'ip-172-31-6-42.eu-west-2.compute.internal:9092'
+KAFKA_TOPIC  = 'tfl_arrivals'
+HDFS_OUTPUT  = '/tmp/yamini/tfl_spark_streaming/output'
+CHECKPOINT   = '/tmp/yamini/tfl_spark_streaming/checkpoint'
+RUN_SECS     = 3600
+
+SCHEMA = StructType([
+    StructField("id",              StringType(),  True),
+    StructField("vehicleId",       StringType(),  True),
+    StructField("stationName",     StringType(),  True),
+    StructField("lineName",        StringType(),  True),
+    StructField("platformName",    StringType(),  True),
+    StructField("expectedArrival", StringType(),  True),
+    StructField("timeToStation",   IntegerType(), True),
+    StructField("currentLocation", StringType(),  True),
+    StructField("direction",       StringType(),  True),
+    StructField("destinationName", StringType(),  True),
+    StructField("timestamp",       StringType(),  True),
+])
+
+def main():
+    spark = SparkSession.builder \
+        .appName("TFL_Spark_Streaming") \
+        .config("spark.sql.parquet.writeLegacyFormat", "true") \
+        .getOrCreate()
+    spark.sparkContext.setLogLevel("WARN")
+
+    raw = spark.readStream \
+        .format("kafka") \
+        .option("kafka.bootstrap.servers", KAFKA_BROKER) \
+        .option("subscribe", KAFKA_TOPIC) \
+        .option("startingOffsets", "latest") \
+        .option("failOnDataLoss", "false") \
+        .load()
+
+    parsed = raw.select(
+        from_json(col("value").cast("string"), SCHEMA).alias("d")
+    ).select("d.*").withColumn("ingested_at", current_timestamp())
+
+    query = parsed.writeStream \
+        .format("parquet") \
+        .option("path", HDFS_OUTPUT) \
+        .option("checkpointLocation", CHECKPOINT) \
+        .trigger(processingTime="60 seconds") \
+        .start()
+
+    print(f"Streaming started → topic: {KAFKA_TOPIC}  output: {HDFS_OUTPUT}")
+    query.awaitTermination(RUN_SECS)
+    query.stop()
+    spark.stop()
+    print("Spark Streaming completed successfully.")
+
+if __name__ == '__main__':
+    main()</pre>
+
+  <h3>Key Design Decisions</h3>
+  <table>
+    <tr><th>Decision</th><th>Why</th></tr>
+    <tr><td><code>--master local[2]</code></td><td>Avoids YARN orphan JVM issue. YARN mode: Python driver exits after 3600s but the JVM container stays alive, locking the checkpoint. Local mode couples the JVM to the Python process.</td></tr>
+    <tr><td><code>startingOffsets: latest</code></td><td>Only processes new messages — avoids reprocessing the full backlog on restart</td></tr>
+    <tr><td><code>trigger(processingTime="60 seconds")</code></td><td>Writes one Parquet file per micro-batch per minute</td></tr>
+    <tr><td><code>checkpointLocation</code></td><td>Tracks which Kafka offsets have been processed — enables exactly-once semantics</td></tr>
+    <tr><td><code>failOnDataLoss=false</code></td><td>Prevents job failure if Kafka topic offsets are reset or messages expired</td></tr>
+    <tr><td><code>parquet.writeLegacyFormat=true</code></td><td>Compatibility with Hive 3.1.3 on CDH which uses older Parquet format</td></tr>
+  </table>
+
+  <h4>Submit the Spark job (background)</h4>
+  <pre>nohup spark-submit \
+  --master local[2] \
+  --name TFL_Spark_Streaming \
+  --driver-memory 512m \
+  --conf spark.sql.parquet.writeLegacyFormat=true \
+  /home/consultant/yamini/tfl_Project1/spark/spark_streaming_tfl.py \
+  > /tmp/spark_streaming.log 2>&amp;1 &amp;
+echo "Spark PID: $!"</pre>
+</div>
+
+<!-- SECTION 7: HDFS -->
+<div class="page" id="s7">
+  <h2 class="section">7. Step 5 – HDFS Directory Preparation</h2>
+  <p>Before starting the Spark job, the HDFS output and checkpoint directories must be created and permissions set. This must be done on every fresh run to avoid checkpoint conflicts.</p>
+
+  <h3>Clean and Recreate HDFS Directories</h3>
+  <pre># Remove old output and checkpoint (clean slate for each run)
+HADOOP_USER_NAME=hdfs hdfs dfs -rm -r -f -skipTrash /tmp/yamini/tfl_spark_streaming
+
+# Recreate fresh directories
+HADOOP_USER_NAME=hdfs hdfs dfs -mkdir -p /tmp/yamini/tfl_spark_streaming/output
+HADOOP_USER_NAME=hdfs hdfs dfs -mkdir -p /tmp/yamini/tfl_spark_streaming/checkpoint
+
+# Open permissions so consultant user can write
+HADOOP_USER_NAME=hdfs hdfs dfs -chmod -R 777 /tmp/yamini/tfl_spark_streaming
+
+echo "HDFS directories ready"</pre>
+
+  <h3>Check HDFS Output After Streaming Runs</h3>
+  <pre># List Parquet files written
+hdfs dfs -ls /tmp/yamini/tfl_spark_streaming/output
+
+# Check total size
+hdfs dfs -du -s -h /tmp/yamini/tfl_spark_streaming/output
+
+# Count Parquet files
+hdfs dfs -ls /tmp/yamini/tfl_spark_streaming/output | grep ".parquet" | wc -l</pre>
+
+  <div class="note">
+    <strong>Checkpoint locking:</strong> If a previous Spark job crashed without releasing the checkpoint, a new job using the same checkpoint path may silently write 0 bytes. Always delete <code>/tmp/yamini/tfl_spark_streaming</code> before each fresh run with <code>hdfs dfs -rm -r -f -skipTrash</code>.
+  </div>
+
+  <h3>Expected HDFS Output</h3>
+  <p>After the streaming job runs for a few minutes (at least 2 micro-batches), you should see:</p>
+  <pre>Found 7 items
+-rw-r--r-- 3 consultant ... /tmp/yamini/tfl_spark_streaming/output/part-00000-...parquet
+-rw-r--r-- 3 consultant ... /tmp/yamini/tfl_spark_streaming/output/part-00001-...parquet
+...
+# Total: ~500 KB for 34,000 records</pre>
+
+  <div class="success">
+    <strong>Success indicator:</strong> Each 60-second micro-batch produces one or more Parquet files. If you see files growing in HDFS, Spark is working correctly.
+  </div>
+</div>
+
+<!-- SECTION 8: HIVE -->
+<div class="page" id="s8">
+  <h2 class="section">8. Step 6 – Hive External Table</h2>
+  <p>Create a Hive external table pointing at the HDFS Parquet output. The table is "external" — Hive manages the metadata only; the data lives in HDFS and is written by Spark.</p>
+
+  <h3>File: spark/hive_spark_table.sql</h3>
+  <pre>CREATE DATABASE IF NOT EXISTS yamini_tfl_proj;
+
+DROP TABLE IF EXISTS yamini_tfl_proj.tfl_spark_arrivals;
+
+CREATE EXTERNAL TABLE yamini_tfl_proj.tfl_spark_arrivals (
+    id              STRING,
+    vehicleId       STRING,
+    stationName     STRING,
+    lineName        STRING,
+    platformName    STRING,
+    expectedArrival STRING,
+    timeToStation   INT,
+    currentLocation STRING,
+    direction       STRING,
+    destinationName STRING,
+    arr_timestamp   STRING,
+    ingested_at     TIMESTAMP
+)
+STORED AS PARQUET
+LOCATION '/tmp/yamini/tfl_spark_streaming/output';
+
+SELECT COUNT(*) AS total_records FROM yamini_tfl_proj.tfl_spark_arrivals;</pre>
+
+  <h3>Run the SQL via Beeline</h3>
+  <pre>beeline -u 'jdbc:hive2://&lt;HIVESERVER2_HOST&gt;:10000/default' \
+  -n consultant \
+  -p 'your_password' \
+  -f /home/consultant/yamini/tfl_Project1/spark/hive_spark_table.sql</pre>
+
+  <h3>Query the Table</h3>
+  <pre># Total record count
+SELECT COUNT(*) FROM yamini_tfl_proj.tfl_spark_arrivals;
+
+# Records per tube line
+SELECT lineName, COUNT(*) AS cnt
+FROM yamini_tfl_proj.tfl_spark_arrivals
+GROUP BY lineName
+ORDER BY cnt DESC;
+
+# Latest arrivals
+SELECT stationName, lineName, expectedArrival, ingested_at
+FROM yamini_tfl_proj.tfl_spark_arrivals
+ORDER BY ingested_at DESC
+LIMIT 20;</pre>
+
+  <div class="note">
+    <strong>External vs Managed table:</strong> Because this is EXTERNAL, running <code>DROP TABLE</code> only removes the Hive metadata — the Parquet files in HDFS are not deleted. This is intentional: Spark owns the data, Hive just queries it.
+  </div>
+</div>
+
+<!-- SECTION 9: RUNNING TOGETHER -->
+<div class="page" id="s9">
+  <h2 class="section">9. Step 7 – Running Everything Together</h2>
+  <p>Follow this exact sequence. All three processes run simultaneously in the background.</p>
+
+  <div class="step">
+    <span class="step-num">1</span><span class="step-title">Kill any leftover processes from a previous run</span>
+  </div>
+  <pre>pkill -9 -f send_data_to_kafka.py   2>/dev/null || true
+pkill -9 -f write_kafka_to_hbase.py 2>/dev/null || true
+pkill -9 -f spark_streaming_tfl.py  2>/dev/null || true
+pkill -9 -f TFL_Spark_Streaming     2>/dev/null || true
+sleep 5
+echo "Old processes stopped"</pre>
+
+  <div class="step">
+    <span class="step-num">2</span><span class="step-title">Prepare HDFS (clean + recreate)</span>
+  </div>
+  <pre>HADOOP_USER_NAME=hdfs hdfs dfs -rm -r -f -skipTrash /tmp/yamini/tfl_spark_streaming 2>/dev/null || true
+HADOOP_USER_NAME=hdfs hdfs dfs -mkdir -p /tmp/yamini/tfl_spark_streaming/output
+HADOOP_USER_NAME=hdfs hdfs dfs -mkdir -p /tmp/yamini/tfl_spark_streaming/checkpoint
+HADOOP_USER_NAME=hdfs hdfs dfs -chmod -R 777 /tmp/yamini/tfl_spark_streaming</pre>
+
+  <div class="step">
+    <span class="step-num">3</span><span class="step-title">Start the Kafka Producer</span>
+  </div>
+  <pre>nohup python3 /home/consultant/yamini/tfl_Project1/kafka/send_data_to_kafka.py \
+  > /tmp/producer_success.log 2>&amp;1 &amp;
+echo "Producer PID: $!"</pre>
+
+  <div class="step">
+    <span class="step-num">4</span><span class="step-title">Start the HBase Consumer</span>
+  </div>
+  <pre>nohup python3 /home/consultant/yamini/tfl_Project1/kafka/write_kafka_to_hbase.py \
+  > /tmp/hbase_consumer.log 2>&amp;1 &amp;
+echo "Consumer PID: $!"</pre>
+
+  <div class="step">
+    <span class="step-num">5</span><span class="step-title">Start Spark Structured Streaming</span>
+  </div>
+  <pre>nohup spark-submit \
+  --master local[2] \
+  --name TFL_Spark_Streaming \
+  --driver-memory 512m \
+  --conf spark.sql.parquet.writeLegacyFormat=true \
+  /home/consultant/yamini/tfl_Project1/spark/spark_streaming_tfl.py \
+  > /tmp/spark_streaming.log 2>&amp;1 &amp;
+echo "Spark PID: $!"</pre>
+
+  <div class="step">
+    <span class="step-num">6</span><span class="step-title">Wait 5 minutes then create the Hive table</span>
+  </div>
+  <pre>sleep 300
+
+beeline -u 'jdbc:hive2://&lt;HIVESERVER2_HOST&gt;:10000/default' \
+  -n consultant -p 'your_password' \
+  -f /home/consultant/yamini/tfl_Project1/spark/hive_spark_table.sql</pre>
+
+  <div class="note">
+    <strong>Why wait 5 minutes?</strong> Spark needs time to start up (~20-30 seconds) and complete at least 2–3 micro-batches (60 seconds each) before Parquet files appear in HDFS. Running Hive DDL before Spark writes any files results in 0 records.
+  </div>
+</div>
+
+<!-- SECTION 10: VERIFICATION -->
+<div class="page" id="s10">
+  <h2 class="section">10. Step 8 – Verifying the Output</h2>
+
+  <h3>Check All Three Processes Are Running</h3>
+  <pre>ps aux | grep -E 'send_data_to_kafka|write_kafka_to_hbase|spark_streaming_tfl' | grep -v grep</pre>
+
+  <h3>Monitor Logs in Real Time</h3>
+  <pre># Producer log
+tail -f /tmp/producer_success.log
+
+# HBase consumer log
+tail -f /tmp/hbase_consumer.log
+
+# Spark log (large — check last 30 lines)
+tail -30 /tmp/spark_streaming.log</pre>
+
+  <h3>Check Kafka Message Count</h3>
+  <pre>kafka-run-class kafka.tools.GetOffsetShell \
+  --broker-list ip-172-31-6-42.eu-west-2.compute.internal:9092 \
+  --topic tfl_arrivals --time -1</pre>
+
+  <h3>Check HBase Record Count</h3>
+  <pre>echo "count 'tfl_arrivals'" | hbase shell -n 2>/dev/null | grep -E "^[0-9]|row"</pre>
+
+  <h3>Check HDFS Parquet Files</h3>
+  <pre>hdfs dfs -ls /tmp/yamini/tfl_spark_streaming/output
+hdfs dfs -du -s -h /tmp/yamini/tfl_spark_streaming/output</pre>
+
+  <h3>Check Hive Record Count</h3>
+  <pre>beeline -u 'jdbc:hive2://&lt;HIVESERVER2_HOST&gt;:10000/default' \
+  -n consultant -p 'your_password' \
+  -e 'SELECT COUNT(*) FROM yamini_tfl_proj.tfl_spark_arrivals'</pre>
+
+  <div class="success">
+    <strong>Expected results after 1 hour of running:</strong><br/>
+    • Kafka: ~4,400,000+ messages across 4 partitions<br/>
+    • HBase: ~26,000+ rows in tfl_arrivals table<br/>
+    • HDFS: 7+ Parquet files, ~500 KB total<br/>
+    • Hive: ~34,000 records in tfl_spark_arrivals
+  </div>
+
+  <h3>Check for Spark Errors</h3>
+  <pre>grep -E 'AnalysisException|Exception in thread|Caused by:|ERROR.*kafka' \
+  /tmp/spark_streaming.log | head -20</pre>
+</div>
+
+<!-- SECTION 11: JENKINS -->
+<div class="page" id="s11">
+  <h2 class="section">11. Jenkins Pipeline Integration</h2>
+  <p>The <code>jenkins_streaming</code> file automates all steps above into a 12-stage pipeline that runs on every build trigger.</p>
+
+  <h3>Pipeline Stages Overview</h3>
+  <table>
+    <tr><th>Stage</th><th>Name</th><th>What it Does</th></tr>
+    <tr><td>1</td><td>Checkout</td><td>Git clone from GitHub</td></tr>
+    <tr><td>2</td><td>Create Directories</td><td>mkdir kafka/ and spark/ on the Cloudera edge node</td></tr>
+    <tr><td>3</td><td>Download Scripts</td><td>wget latest Python and SQL scripts from GitHub raw URLs</td></tr>
+    <tr><td>4</td><td>Stop Existing Processes</td><td>pkill old producer, consumer, Spark; kill YARN apps</td></tr>
+    <tr><td>5</td><td>Prepare HDFS</td><td>Delete old output/checkpoint, recreate with chmod 777</td></tr>
+    <tr><td>6</td><td>Start Kafka Producer</td><td>nohup send_data_to_kafka.py in background</td></tr>
+    <tr><td>7</td><td>Start HBase Consumer</td><td>nohup write_kafka_to_hbase.py in background</td></tr>
+    <tr><td>8</td><td>Start Spark Streaming</td><td>nohup spark-submit local[2] in background</td></tr>
+    <tr><td>9</td><td>Verify Kafka Topic</td><td>sleep 30, then describe topic + count messages</td></tr>
+    <tr><td>10</td><td>Verify HBase Table</td><td>count rows in HBase tfl_arrivals</td></tr>
+    <tr><td>11</td><td>Verify Spark + Hive</td><td>sleep 300, check HDFS output, run hive_spark_table.sql</td></tr>
+    <tr><td>12</td><td>Check All Logs</td><td>tail logs, show running processes, grep Spark errors</td></tr>
+  </table>
+
+  <h3>SSH Authentication (sshpass)</h3>
+  <p>The pipeline uses <code>sshpass</code> for password-based SSH — no key file required:</p>
+  <pre>sshpass -p "your_password" ssh -o StrictHostKeyChecking=no \
+  consultant@your-host "remote command here"</pre>
+
+  <div class="warn">
+    <strong>Common mistake:</strong> If you see <code>Identity file not accessible: No such file or directory</code> in the Jenkins logs, the pipeline is using SSH key auth (<code>-i keyfile</code>) but the key doesn't exist. Switch to <code>sshpass</code> password auth as shown above.
+  </div>
+
+  <h3>Why Scripts Are Downloaded via wget (not scp)</h3>
+  <p>Jenkins runs on a different server. The Python scripts live in GitHub. Rather than copying from the Jenkins workspace (which requires network setup), the pipeline downloads the latest version directly from GitHub Raw URLs:</p>
+  <pre>wget -q -O spark_streaming_tfl.py \
+  https://raw.githubusercontent.com/YOUR_USER/TFL_Project/main/src/spark/spark_streaming_tfl.py</pre>
+  <p>This means every build always uses the latest committed code.</p>
+</div>
+
+<!-- SECTION 12: ERRORS -->
+<div class="page" id="s12">
+  <h2 class="section">12. Common Errors &amp; Fixes</h2>
+
+  <h3>Error 1: kafka.group.id not supported</h3>
+  <pre>IllegalArgumentException: Kafka option 'group.id' is not supported as user-specified
+consumer groups are not used to track offsets.</pre>
+  <div class="warn"><strong>Cause:</strong> Spark 2.4's Kafka connector does not allow setting a consumer group ID.</div>
+  <div class="success"><strong>Fix:</strong> Remove <code>.option("kafka.group.id", ...)</code> from your Spark code entirely. Spark manages offsets via the checkpoint directory.</div>
+
+  <hr class="divider"/>
+
+  <h3>Error 2: Spark writes 0 bytes to HDFS</h3>
+  <pre>hdfs dfs -du -s -h /tmp/yamini/tfl_spark_streaming/output
+0  /tmp/yamini/tfl_spark_streaming/output</pre>
+  <div class="warn"><strong>Cause:</strong> A previous Spark YARN job is still running as an orphan JVM. After its Python driver exited (after 3600s), the YARN container stays alive and reclaims the checkpoint directory on HDFS, silently blocking the new Spark job.</div>
+  <div class="success"><strong>Fix:</strong> Use <code>--master local[2]</code> instead of YARN. In local mode, the JVM is tightly coupled to the Python process — when Python exits, the JVM exits. No orphan containers possible.</div>
+
+  <hr class="divider"/>
+
+  <h3>Error 3: No such file or directory for the Python script</h3>
+  <pre>python3: can't open file '/path/to/spark_full_load_tfl.py': [Errno 2] No such file or directory</pre>
+  <div class="warn"><strong>Cause:</strong> You are SSH'd into the wrong machine. The script exists on the Cloudera edge node but you are on the Hadoop namenode (ec2-user@ip-172-31-3-85).</div>
+  <div class="success"><strong>Fix:</strong> Either wget the script first, or SSH to the correct machine (consultant@your-cloudera-host) where Jenkins downloaded it.</div>
+
+  <hr class="divider"/>
+
+  <h3>Error 4: SSH Permission Denied in Jenkins</h3>
+  <pre>Warning: Identity file /var/lib/jenkins/.ssh/test_key.pem not accessible: No such file or directory.
+ec2-user@host: Permission denied (publickey,...)</pre>
+  <div class="warn"><strong>Cause:</strong> The Jenkinsfile uses <code>ssh -i keyfile</code> but the key file doesn't exist on the Jenkins server.</div>
+  <div class="success"><strong>Fix:</strong> Replace <code>ssh -i ${SSH_KEY}</code> with <code>sshpass -p "password" ssh</code> in every stage of the Jenkinsfile.</div>
+
+  <hr class="divider"/>
+
+  <h3>Error 5: Hive returns 0 records</h3>
+  <pre>SELECT COUNT(*) FROM yamini_tfl_proj.tfl_spark_arrivals;
+-- Result: 0</pre>
+  <div class="warn"><strong>Cause:</strong> The Hive table was created before Spark wrote any Parquet files, OR the Spark job wrote 0 bytes (see Error 2).</div>
+  <div class="success"><strong>Fix:</strong> Wait at least 5 minutes after starting Spark, verify Parquet files exist with <code>hdfs dfs -ls</code>, then re-run the Hive DDL.</div>
+</div>
+
+<!-- SECTION 13: SUMMARY -->
+<div class="page" id="s13">
+  <h2 class="section">13. Key Concepts Summary</h2>
+
+  <table>
+    <tr><th>Concept</th><th>Explanation</th></tr>
+    <tr><td>Spark Structured Streaming</td><td>Uses <code>spark.readStream</code> to continuously read Kafka. Each trigger interval produces one micro-batch.</td></tr>
+    <tr><td>Spark Batch (Full Load)</td><td>Uses <code>spark.read</code> to read ALL Kafka messages at once from <code>earliest</code> to <code>latest</code>. One-shot job, not continuous.</td></tr>
+    <tr><td>Checkpoint Directory</td><td>Stores Kafka offsets and streaming state. Spark uses it to resume after failure and track exactly-once delivery.</td></tr>
+    <tr><td>startingOffsets: latest</td><td>Streaming job only reads new messages from the moment it starts. Use <code>earliest</code> to read the entire backlog.</td></tr>
+    <tr><td>local[2] vs YARN</td><td><code>local[2]</code> — runs in the same JVM as the driver, 2 threads. YARN — submits to the cluster resource manager, can create orphan containers.</td></tr>
+    <tr><td>External Hive Table</td><td>Hive stores only metadata. The actual data files are in HDFS and managed by Spark. DROP TABLE removes metadata only.</td></tr>
+    <tr><td>HADOOP_USER_NAME=hdfs</td><td>Impersonates the HDFS superuser for a single command. Needed when your Linux user doesn't have HDFS write permissions.</td></tr>
+    <tr><td>nohup + &amp;</td><td><code>nohup</code> prevents the process from being killed when the SSH session ends. <code>&amp;</code> runs it in the background so Jenkins can continue to the next stage.</td></tr>
+    <tr><td>failOnDataLoss=false</td><td>Prevents Spark job failure if Kafka topic offsets have been reset (e.g. topic deleted and recreated).</td></tr>
+    <tr><td>writeLegacyFormat=true</td><td>Writes Parquet in a format compatible with older Hive/CDH versions that don't support the newer INT96 timestamp encoding.</td></tr>
+  </table>
+
+  <h3>Quick Reference: Files in This Project</h3>
+  <table>
+    <tr><th>File</th><th>Location</th><th>Purpose</th></tr>
+    <tr><td>send_data_to_kafka.py</td><td>src/kafka/</td><td>TFL API → Kafka producer</td></tr>
+    <tr><td>write_kafka_to_hbase.py</td><td>src/kafka/</td><td>Kafka → HBase consumer</td></tr>
+    <tr><td>spark_streaming_tfl.py</td><td>src/spark/</td><td>Kafka → HDFS Parquet (streaming)</td></tr>
+    <tr><td>hive_spark_table.sql</td><td>src/spark/</td><td>Hive external table DDL + queries</td></tr>
+    <tr><td>spark_full_load_tfl.py</td><td>src/spark/</td><td>Kafka → HDFS Parquet (batch, full history)</td></tr>
+    <tr><td>hive_full_load_table.sql</td><td>src/spark/</td><td>Hive partitioned table for full load</td></tr>
+    <tr><td>jenkins_streaming</td><td>test/</td><td>Jenkins pipeline for streaming workflow</td></tr>
+    <tr><td>Jenkinsfile</td><td>test/</td><td>Jenkins pipeline for Sqoop + full load</td></tr>
+  </table>
+
+  <div class="success" style="margin-top:30px;">
+    <strong>Practice Checklist:</strong><br/>
+    ☐ Create Kafka topic tfl_arrivals<br/>
+    ☐ Start producer — verify messages in Kafka<br/>
+    ☐ Create HBase table — start consumer — verify rows<br/>
+    ☐ Prepare HDFS directories<br/>
+    ☐ Start Spark streaming job<br/>
+    ☐ Wait 5 minutes — verify Parquet files in HDFS<br/>
+    ☐ Create Hive table — run COUNT(*) query<br/>
+    ☐ Check all three process logs for errors
+  </div>
+</div>
+
+</body>
+</html>

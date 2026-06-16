@@ -8,6 +8,7 @@ pipeline {
         PROJECT_DIR      = '/home/consultant/yamini/tfl_Project1'
         HDFS_DIR         = '/tmp/yamini/tfl_project1'
         HDFS_FULL_LOAD   = '/tmp/yamini/tfl_full_load'
+        HDFS_GOLD        = '/tmp/yamini/tfl_project1/gold'
         HIVESERVER2_HOST = '18.175.245.20'
     }
 
@@ -61,6 +62,10 @@ pipeline {
                         src/spark/hive_full_load_table.sql ${REMOTE_USER}@${REMOTE_HOST}:${PROJECT_DIR}/spark/ 2>&1 | \
                         grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
 
+                    sshpass -p "${REMOTE_PASSWORD}" scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                        src/spark/spark_gold_layer.py ${REMOTE_USER}@${REMOTE_HOST}:${PROJECT_DIR}/spark/ 2>&1 | \
+                        grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
+
                     echo "Scripts copied successfully"
                 '''
             }
@@ -111,7 +116,10 @@ pipeline {
                          HADOOP_USER_NAME=hdfs hdfs dfs -chmod 777 ${HDFS_DIR}; \
                          HADOOP_USER_NAME=hdfs hdfs dfs -rm -r -f -skipTrash ${HDFS_FULL_LOAD} 2>/dev/null || true; \
                          HADOOP_USER_NAME=hdfs hdfs dfs -mkdir -p ${HDFS_FULL_LOAD}/output; \
-                         HADOOP_USER_NAME=hdfs hdfs dfs -chmod -R 777 ${HDFS_FULL_LOAD}" 2>&1 | \
+                         HADOOP_USER_NAME=hdfs hdfs dfs -chmod -R 777 ${HDFS_FULL_LOAD}; \
+                         HADOOP_USER_NAME=hdfs hdfs dfs -rm -r -f -skipTrash ${HDFS_GOLD} 2>/dev/null || true; \
+                         HADOOP_USER_NAME=hdfs hdfs dfs -mkdir -p ${HDFS_GOLD}; \
+                         HADOOP_USER_NAME=hdfs hdfs dfs -chmod -R 777 ${HDFS_GOLD}" 2>&1 | \
                         grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
 
                     echo "HDFS cleaned and recreated with open permissions"
@@ -154,10 +162,32 @@ pipeline {
             }
         }
 
+        stage('Run Spark Gold Layer') {
+            steps {
+                echo '========================================='
+                echo 'Stage 9: Spark Gold Layer Transformations'
+                echo '========================================='
+                sh '''
+                    sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                        ${REMOTE_USER}@${REMOTE_HOST} \
+                        "spark-submit \
+                             --master local[4] \
+                             --name TFL_Gold_Layer \
+                             --driver-memory 2g \
+                             --conf spark.sql.parquet.writeLegacyFormat=true \
+                             --conf spark.sql.shuffle.partitions=4 \
+                             ${PROJECT_DIR}/spark/spark_gold_layer.py" 2>&1 | \
+                        grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
+
+                    echo "Gold layer completed"
+                '''
+            }
+        }
+
         stage('Run Spark Full Load') {
             steps {
                 echo '========================================='
-                echo 'Stage 9: Spark Full Load - Kafka → HDFS Parquet (batch)'
+                echo 'Stage 10: Spark Full Load - Kafka → HDFS Parquet (batch)'
                 echo '========================================='
                 sh '''
                     sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
@@ -179,7 +209,7 @@ pipeline {
         stage('Create Hive Full Load Table') {
             steps {
                 echo '========================================='
-                echo 'Stage 10: Register Hive Full Load Table'
+                echo 'Stage 11: Register Hive Full Load Table'
                 echo '========================================='
                 sh '''
                     sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
@@ -198,12 +228,15 @@ pipeline {
         stage('Verify Results') {
             steps {
                 echo '========================================='
-                echo 'Stage 11: Verify HDFS Data'
+                echo 'Stage 12: Verify HDFS Data'
                 echo '========================================='
                 sh '''
                     sshpass -p "${REMOTE_PASSWORD}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
                         ${REMOTE_USER}@${REMOTE_HOST} \
-                        "hdfs dfs -ls ${HDFS_DIR} 2>/dev/null || echo 'HDFS directory not found'" 2>&1 | \
+                        "echo '--- Sqoop HDFS Output ---'; \
+                         hdfs dfs -ls ${HDFS_DIR} 2>/dev/null || echo 'HDFS directory not found'; \
+                         echo '--- Gold Layer HDFS Output ---'; \
+                         hdfs dfs -ls ${HDFS_GOLD} 2>/dev/null || echo 'No gold output found'" 2>&1 | \
                         grep -v "ITC Big Data Lab" | grep -v "Commands:" | grep -v "HDFS home:" | grep -v "━" || true
                 '''
             }
@@ -217,7 +250,9 @@ pipeline {
             echo '========================================='
             echo "Cloudera: ${REMOTE_HOST}:${PROJECT_DIR}"
             echo "HDFS Sqoop : ${HDFS_DIR}"
+            echo "HDFS Gold     : ${HDFS_GOLD}"
             echo "HDFS Full Load: ${HDFS_FULL_LOAD}/output"
+            echo "Hive Gold     : yamini_tfl_proj.gold_*"
             echo "Hive Full Load: yamini_tfl_proj.tfl_full_load"
             echo '========================================='
         }

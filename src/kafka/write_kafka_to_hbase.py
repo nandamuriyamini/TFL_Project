@@ -33,7 +33,8 @@ def ensure_table_exists():
         input=check_cmd.encode('utf-8'),
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30
     )
-    if b'does exist' in result.stdout:
+    output = result.stdout.decode('utf-8', errors='ignore')
+    if 'does not exist' not in output:
         logging.info("HBase table %s already exists", HBASE_TABLE)
         return
     create_cmd = f"create '{HBASE_TABLE}', 'cf'\nexit\n"

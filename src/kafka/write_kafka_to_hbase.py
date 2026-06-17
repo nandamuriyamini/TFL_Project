@@ -20,9 +20,30 @@ logging.basicConfig(
 
 KAFKA_BROKER = 'ip-172-31-6-42.eu-west-2.compute.internal:9092'
 TOPIC        = 'tfl_arrivals'
-HBASE_TABLE  = 'tfl_arrivals'
+HBASE_TABLE  = 'yamini_tfl_arrivals'
 GROUP_ID     = 'yamini_tfl_hbase_consumer'
 BATCH_SIZE   = 20    # write to HBase every N messages
+
+
+def ensure_table_exists():
+    """Create HBase table if it does not already exist."""
+    check_cmd = f"exists '{HBASE_TABLE}'\nexit\n"
+    result = subprocess.run(
+        ['hbase', 'shell', '-n'],
+        input=check_cmd.encode('utf-8'),
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30
+    )
+    if b'does exist' in result.stdout:
+        logging.info("HBase table %s already exists", HBASE_TABLE)
+        return
+    create_cmd = f"create '{HBASE_TABLE}', 'cf'\nexit\n"
+    subprocess.run(
+        ['hbase', 'shell', '-n'],
+        input=create_cmd.encode('utf-8'),
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30
+    )
+    logging.info("Created HBase table %s", HBASE_TABLE)
+    print(f"Created HBase table: {HBASE_TABLE}")
 
 
 def build_row_key(record):
@@ -66,6 +87,8 @@ def write_batch_to_hbase(records):
 
 
 def main():
+    ensure_table_exists()
+
     consumer = KafkaConsumer(
         TOPIC,
         bootstrap_servers=KAFKA_BROKER,

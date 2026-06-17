@@ -21,7 +21,7 @@ logging.basicConfig(
 KAFKA_BROKER = 'ip-172-31-6-42.eu-west-2.compute.internal:9092'
 TOPIC        = 'tfl_arrivals'
 HBASE_TABLE  = 'yamini_tfl_arrivals'
-GROUP_ID     = 'yamini_tfl_hbase_consumer'
+GROUP_ID     = 'yamini_hbase_v2'
 BATCH_SIZE   = 20    # write to HBase every N messages
 
 
@@ -47,29 +47,75 @@ def ensure_table_exists():
     print(f"Created HBase table: {HBASE_TABLE}")
 
 
+def _clean(v):
+    return str(v).replace("'", "").strip() if v else ''
+
+def _delay_level(time_to_station):
+    try:
+        t = int(time_to_station)
+        if t <= 60:   return 'arriving'
+        if t <= 300:  return 'close'
+        if t <= 600:  return 'medium'
+        return 'far'
+    except Exception:
+        return 'unknown'
+
+def _peak_hours(ingested_at):
+    try:
+        hour = int(str(ingested_at)[11:13])
+        if 7 <= hour < 10:  return 'morning_peak'
+        if 16 <= hour < 20: return 'evening_peak'
+        return 'off_peak'
+    except Exception:
+        return 'off_peak'
+
 def build_row_key(record):
-    station   = record.get('stationName', '').replace(' ', '')
-    vehicle   = record.get('vehicleId', '')
-    timestamp = record.get('timestamp', '')
-    return f"{station}_{vehicle}_{timestamp}"
+    station    = record.get('stationName', '').replace(' ', '').replace("'", "")
+    line       = record.get('lineName', '').replace(' ', '').replace("'", "")
+    vehicle    = record.get('vehicleId', '')
+    arr_ts     = record.get('arr_timestamp', record.get('timestamp', ''))
+    return f"{station}#{line}#{vehicle}#{arr_ts}"
 
 
 def write_batch_to_hbase(records):
     """Write a batch of records to HBase in a single shell call."""
     commands = []
     for record in records:
-        row_key  = build_row_key(record)
-        station  = record.get('stationName', '').replace("'", "")
-        vehicle  = record.get('vehicleId', '').replace("'", "")
-        line     = record.get('lineName', '').replace("'", "")
-        platform = record.get('platformName', '').replace("'", "")
-        arrival  = record.get('expectedArrival', '').replace("'", "")
+        row_key     = build_row_key(record)
+        station     = _clean(record.get('stationName'))
+        vehicle     = _clean(record.get('vehicleId'))
+        line        = _clean(record.get('lineName'))
+        platform    = _clean(record.get('platformName'))
+        arrival     = _clean(record.get('expectedArrival'))
+        time_to_stn = _clean(record.get('timeToStation', '0'))
+        location    = _clean(record.get('currentLocation'))
+        direction   = _clean(record.get('direction'))
+        dest        = _clean(record.get('destinationName'))
+        arr_ts      = _clean(record.get('arr_timestamp', record.get('timestamp', '')))
+        ingested_at = _clean(record.get('ingested_at', time.strftime('%Y-%m-%d %H:%M:%S')))
 
-        commands.append(f"put '{HBASE_TABLE}', '{row_key}', 'cf:station', '{station}'")
-        commands.append(f"put '{HBASE_TABLE}', '{row_key}', 'cf:vehicle', '{vehicle}'")
-        commands.append(f"put '{HBASE_TABLE}', '{row_key}', 'cf:line', '{line}'")
-        commands.append(f"put '{HBASE_TABLE}', '{row_key}', 'cf:platform', '{platform}'")
-        commands.append(f"put '{HBASE_TABLE}', '{row_key}', 'cf:arrival', '{arrival}'")
+        delay_level  = _delay_level(time_to_stn)
+        peak         = _peak_hours(ingested_at)
+
+        try:
+            mins = round(int(time_to_stn) / 60, 2)
+        except Exception:
+            mins = 0
+
+        commands.append(f"put '{HBASE_TABLE}', '{row_key}', 'cf:stationName',     '{station}'")
+        commands.append(f"put '{HBASE_TABLE}', '{row_key}', 'cf:vehicleId',       '{vehicle}'")
+        commands.append(f"put '{HBASE_TABLE}', '{row_key}', 'cf:lineName',        '{line}'")
+        commands.append(f"put '{HBASE_TABLE}', '{row_key}', 'cf:platformName',    '{platform}'")
+        commands.append(f"put '{HBASE_TABLE}', '{row_key}', 'cf:expectedArrival', '{arrival}'")
+        commands.append(f"put '{HBASE_TABLE}', '{row_key}', 'cf:timeToStation',   '{time_to_stn}'")
+        commands.append(f"put '{HBASE_TABLE}', '{row_key}', 'cf:timeToStationMin','{mins}'")
+        commands.append(f"put '{HBASE_TABLE}', '{row_key}', 'cf:currentLocation', '{location}'")
+        commands.append(f"put '{HBASE_TABLE}', '{row_key}', 'cf:direction',       '{direction}'")
+        commands.append(f"put '{HBASE_TABLE}', '{row_key}', 'cf:destinationName', '{dest}'")
+        commands.append(f"put '{HBASE_TABLE}', '{row_key}', 'cf:arr_timestamp',   '{arr_ts}'")
+        commands.append(f"put '{HBASE_TABLE}', '{row_key}', 'cf:ingestionTime',   '{ingested_at}'")
+        commands.append(f"put '{HBASE_TABLE}', '{row_key}', 'cf:delayLevel',      '{delay_level}'")
+        commands.append(f"put '{HBASE_TABLE}', '{row_key}', 'cf:peakHours',       '{peak}'")
 
     hbase_input = '\n'.join(commands) + '\nexit\n'
 

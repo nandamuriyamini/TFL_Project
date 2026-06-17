@@ -10,14 +10,15 @@ pipeline {
     }
 
     environment {
-        REMOTE_HOST      = '13.41.167.97'
-        REMOTE_USER      = 'consultant'
-        REMOTE_PASSWORD  = 'Cl0ud3ra@2026#Secur3!'
-        PROJECT_DIR      = '/home/consultant/yamini/tfl_Project1'
-        HDFS_BASE        = '/tmp/yamini/tfl_project1'
-        HDFS_INC         = '/tmp/yamini/tfl_project1/incremental'
-        HDFS_GOLD        = '/tmp/yamini/tfl_project1/gold'
-        HIVESERVER2_HOST = '18.175.245.20'
+        REMOTE_HOST       = '13.41.167.97'
+        REMOTE_USER       = 'consultant'
+        REMOTE_PASSWORD   = 'Cl0ud3ra@2026#Secur3!'
+        PROJECT_DIR       = '/home/consultant/yamini/tfl_Project1'
+        HDFS_BASE         = '/tmp/yamini/tfl_project1'
+        HDFS_INC          = '/tmp/yamini/tfl_project1/incremental'
+        HDFS_GOLD         = '/tmp/yamini/tfl_project1/gold'
+        HIVESERVER2_HOST  = '18.175.245.20'
+        INCREMENTAL_YEAR  = "${params.INCREMENTAL_YEAR}"
     }
 
     stages {
